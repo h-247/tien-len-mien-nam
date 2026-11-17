@@ -528,17 +528,17 @@ export async function startRoomMatch(params: {
     status: roundState.status,
     firstPlayerSeat: roundState.firstPlayerSeat,
     currentTurnSeat: roundState.currentTurnSeat,
-    lastPlaySeat: roundState.lastPlaySeat,
+    lastPlaySeat: roundState.lastPlaySeat ?? null,
     lastPlayCards: roundState.lastPlayCards ? JSON.stringify(roundState.lastPlayCards) : null,
-    lastPlayType: roundState.lastPlayType,
+    lastPlayType: roundState.lastPlayType ?? null,
     trickPasses: JSON.stringify(roundState.trickPasses),
-    winnerSeat: roundState.winnerSeat,
+    winnerSeat: roundState.winnerSeat ?? null,
     rankPositions: JSON.stringify(roundState.rankPositions),
-    instantWinType: roundState.instantWinType,
+    instantWinType: roundState.instantWinType ?? null,
     roundLogs: JSON.stringify(roundState.roundLogs),
     version: 1,
     createdAt: roundState.createdAt,
-    finishedAt: roundState.finishedAt,
+    finishedAt: roundState.finishedAt ?? null,
   });
 
   // Save game_hands
@@ -549,7 +549,7 @@ export async function startRoomMatch(params: {
       seatIndex: hand.seatIndex,
       cards: JSON.stringify(hand.cards),
       initialCards: JSON.stringify(hand.initialCards),
-      finishedPosition: hand.finishedPosition,
+      finishedPosition: hand.finishedPosition ?? null,
       createdAt: roundState.createdAt,
       updatedAt: roundState.createdAt,
     });
@@ -830,15 +830,15 @@ async function saveRoundState(state: RoundState) {
     .set({
       status: state.status,
       currentTurnSeat: state.currentTurnSeat,
-      lastPlaySeat: state.lastPlaySeat,
+      lastPlaySeat: state.lastPlaySeat ?? null,
       lastPlayCards: state.lastPlayCards ? JSON.stringify(state.lastPlayCards) : null,
-      lastPlayType: state.lastPlayType,
+      lastPlayType: state.lastPlayType ?? null,
       trickPasses: JSON.stringify(state.trickPasses),
-      winnerSeat: state.winnerSeat,
+      winnerSeat: state.winnerSeat ?? null,
       rankPositions: JSON.stringify(state.rankPositions),
       roundLogs: JSON.stringify(state.roundLogs),
       version: state.version,
-      finishedAt: state.finishedAt,
+      finishedAt: state.finishedAt ?? null,
     })
     .where(eq(gameRounds.id, state.id));
 
@@ -847,7 +847,7 @@ async function saveRoundState(state: RoundState) {
       .update(gameHands)
       .set({
         cards: JSON.stringify(hand.cards),
-        finishedPosition: hand.finishedPosition,
+        finishedPosition: hand.finishedPosition ?? null,
         updatedAt: Date.now(),
       })
       .where(and(eq(gameHands.roundId, state.id), eq(gameHands.seatIndex, hand.seatIndex)));

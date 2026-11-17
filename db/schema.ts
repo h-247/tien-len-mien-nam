@@ -5,6 +5,8 @@ export const users = sqliteTable(
   {
     id: text('id').primaryKey(), // ChatGPT User ID or local dev ID
     email: text('email').notNull(),
+    username: text('username'),
+    passwordHash: text('password_hash'),
     fullName: text('full_name'),
     role: text('role', { enum: ['admin', 'player'] }).notNull().default('player'),
     status: text('status', {
@@ -18,6 +20,7 @@ export const users = sqliteTable(
   },
   (table) => [
     index('idx_users_email').on(table.email),
+    index('idx_users_username').on(table.username),
     index('idx_users_status').on(table.status),
     index('idx_users_role').on(table.role),
   ]

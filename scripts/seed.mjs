@@ -6,6 +6,8 @@ const INIT_SQL = `
 CREATE TABLE IF NOT EXISTS users (
 	id text PRIMARY KEY NOT NULL,
 	email text NOT NULL,
+	username text,
+	password_hash text,
 	full_name text,
 	role text DEFAULT 'player' NOT NULL,
 	status text DEFAULT 'new' NOT NULL,
@@ -334,6 +336,9 @@ export function seedDatabase(dbPath) {
 
   // Execute table creation
   db.exec(INIT_SQL);
+  try { db.exec('ALTER TABLE users ADD COLUMN password_hash text;'); } catch (_) {}
+  try { db.exec('ALTER TABLE users ADD COLUMN username text;'); } catch (_) {}
+  try { db.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);'); } catch (_) {}
 
   const now = Date.now();
   let inserted = 0;

@@ -9,6 +9,8 @@ const INIT_SQL = `
 CREATE TABLE IF NOT EXISTS users (
 	id text PRIMARY KEY NOT NULL,
 	email text NOT NULL,
+	username text,
+	password_hash text,
 	full_name text,
 	role text DEFAULT 'player' NOT NULL,
 	status text DEFAULT 'new' NOT NULL,
@@ -192,6 +194,15 @@ export async function getAppDb() {
   if (!initialized) {
     try {
       await env.DB.exec(INIT_SQL);
+      try {
+        await env.DB.exec('ALTER TABLE users ADD COLUMN password_hash text;');
+      } catch (_) {}
+      try {
+        await env.DB.exec('ALTER TABLE users ADD COLUMN username text;');
+      } catch (_) {}
+      try {
+        await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);');
+      } catch (_) {}
       initialized = true;
     } catch (e) {
       console.error('Error ensuring tables:', e);
