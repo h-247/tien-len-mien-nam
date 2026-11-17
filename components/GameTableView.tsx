@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ClientRoomState, PublicSeatState } from '@/lib/server/game-service';
 import { PlayingCard } from './PlayingCard';
 import { sortCardsByRank, sortCardsBySuit, getCard, getCards } from '@/lib/tienlen/cards';
@@ -42,6 +42,55 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
   const [actionError, setActionError] = useState<string | null>(null);
   const [showRoomInfo, setShowRoomInfo] = useState(false);
 
+  const TURN_DURATION = 15;
+  const [turnTimeLeft, setTurnTimeLeft] = useState<number>(TURN_DURATION);
+  const botStepPendingRef = useRef(false);
+
+  // Reset turn timer on turn or version changes
+  useEffect(() => {
+    setTurnTimeLeft(TURN_DURATION);
+  }, [round?.currentTurnSeat, round?.version]);
+
+  // Turn countdown timer interval
+  useEffect(() => {
+    if (round?.status !== 'playing') return;
+
+    const interval = setInterval(() => {
+      setTurnTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [round?.status, round?.currentTurnSeat, round?.version]);
+
+  // Auto-advance bot turns sequentially with visible thinking time
+  useEffect(() => {
+    if (round?.status !== 'playing') {
+      botStepPendingRef.current = false;
+      return;
+    }
+
+    const currentSeat = seats[round.currentTurnSeat];
+    if (!currentSeat?.isBot) {
+      botStepPendingRef.current = false;
+      return;
+    }
+
+    // Delay 1.5s so user sees the timer decrease (15s -> 14s -> 13s) before the bot plays
+    const botTimer = setTimeout(async () => {
+      if (botStepPendingRef.current) return;
+      botStepPendingRef.current = true;
+      try {
+        await onAction({ action: 'botStep' });
+      } catch (err: any) {
+        console.error('Lỗi khi bot thực hiện lượt:', err);
+      } finally {
+        botStepPendingRef.current = false;
+      }
+    }, 1500);
+
+    return () => clearTimeout(botTimer);
+  }, [round?.currentTurnSeat, round?.version, round?.status, seats, onAction]);
+
   // Auto-clear invalid selection on turn changes
   useEffect(() => {
     setSelectedCardIds([]);
@@ -71,7 +120,12 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
     }
 
     // Check first trick 3 of spades constraint
-    if (round?.roundNumber === 1 && !round.lastPlayCards && round.firstPlayerSeat === mySeatIndex) {
+    if (
+      round?.roundNumber === 1 &&
+      !round.lastPlayCards &&
+      round.firstPlayerSeat === mySeatIndex &&
+      myCards.includes('3_spades')
+    ) {
       if (!selectedCardIds.includes('3_spades')) {
         return { valid: false, error: 'Nước đi đầu tiên phải có 3 Bích.' };
       }
@@ -164,6 +218,41 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
     setActionError(null);
   };
 
+  // Auto-move on timeout for current player
+  useEffect(() => {
+    if (round?.status !== 'playing' || !isMyTurn || turnTimeLeft > 0 || loading) return;
+
+    if (round.lastPlayCards && round.lastPlayCards.length > 0) {
+      // Auto-pass if possible
+      handlePass();
+    } else {
+      // Must lead: play lowest legal move
+      const myHandCards = getCards(myCards);
+      const mustInclude =
+        round.roundNumber === 1 &&
+        !round.lastPlayCards &&
+        round.firstPlayerSeat === mySeatIndex &&
+        myCards.includes('3_spades')
+          ? '3_spades'
+          : undefined;
+
+      const legalMoves = generateLegalMoves(myHandCards, null, mustInclude);
+      if (legalMoves.length > 0) {
+        const sortedMoves = [...legalMoves].sort((a, b) => {
+          const comboA = identifyCombination(a)!;
+          const comboB = identifyCombination(b)!;
+          return comboA.highestCard.rankValue - comboB.highestCard.rankValue;
+        });
+        const chosen = sortedMoves[0];
+        onAction({
+          action: 'play',
+          cardIds: chosen.map((c) => c.id),
+          version: round.version,
+        }).catch(console.error);
+      }
+    }
+  }, [turnTimeLeft, isMyTurn, round, loading, myCards, mySeatIndex, onAction]);
+
   // Relative seat mapping for 4-player table:
   // Bottom: Current player (seat 0 in view)
   // Left: Next seat clockwise ((mySeatIndex + 1) % 4)
@@ -231,10 +320,23 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
             ) : isPassed ? (
               <span className="text-neutral-500 font-medium">Đã bỏ lượt</span>
             ) : (
-              <span className="text-neutral-300 font-medium flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
-                {seat.cardCount} lá
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-neutral-300 font-medium flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />
+                  {seat.cardCount} lá
+                </span>
+                {isTheirTurn && (
+                  <span
+                    className={`font-mono text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                      turnTimeLeft <= 5
+                        ? 'bg-red-900/80 text-red-300 border border-red-700 animate-pulse'
+                        : 'bg-yellow-400/20 text-yellow-300 border border-yellow-500/30'
+                    }`}
+                  >
+                    ⏱️ {turnTimeLeft}s
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -290,17 +392,44 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
           <div className="flex-1 flex flex-col items-center justify-center text-center px-1">
             {/* Round Status / Turn indicator */}
             {round?.status === 'playing' && (
-              <div className="mb-2">
+              <div className="mb-2 flex flex-col items-center">
                 {isMyTurn ? (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-yellow-400 text-black font-extrabold text-xs shadow-md animate-bounce">
+                  <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-yellow-400 text-black font-extrabold text-xs shadow-md ring-2 ring-yellow-300">
                     <Sparkles className="w-3.5 h-3.5" />
-                    Đến lượt bạn đánh bài!
+                    <span>Đến lượt bạn đánh bài!</span>
+                    <span className="font-mono bg-black/15 text-black px-1.5 py-0.5 rounded text-xs font-black">
+                      ⏱️ {turnTimeLeft}s
+                    </span>
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-neutral-800 text-neutral-300 font-medium text-xs border border-neutral-700">
-                    Lượt của: {seats[round.currentTurnSeat]?.displayName || 'Người chơi'}
+                  <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-800 text-neutral-200 font-medium text-xs border border-neutral-700 shadow-sm">
+                    <span>
+                      Lượt của:{' '}
+                      <b className="text-white">
+                        {seats[round.currentTurnSeat]?.displayName || 'Người chơi'}
+                      </b>
+                    </span>
+                    <span
+                      className={`font-mono px-2 py-0.5 rounded-full text-xs font-bold ${
+                        turnTimeLeft <= 5
+                          ? 'bg-red-950 text-red-400 border border-red-800 animate-pulse'
+                          : 'bg-yellow-400/20 text-yellow-300 border border-yellow-500/40'
+                      }`}
+                    >
+                      ⏱️ {turnTimeLeft}s
+                    </span>
                   </span>
                 )}
+
+                {/* Turn progress bar */}
+                <div className="w-36 sm:w-48 h-1 bg-neutral-800 rounded-full overflow-hidden mt-1.5 border border-neutral-700/50">
+                  <div
+                    className={`h-full transition-all duration-1000 ease-linear ${
+                      turnTimeLeft <= 5 ? 'bg-red-500' : isMyTurn ? 'bg-yellow-400' : 'bg-purple-400'
+                    }`}
+                    style={{ width: `${(turnTimeLeft / TURN_DURATION) * 100}%` }}
+                  />
+                </div>
               </div>
             )}
 
@@ -349,6 +478,24 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
 
         {/* Bottom Area: Current Player's Hand & Controls */}
         <div className="z-20 flex flex-col items-center w-full pt-2">
+          {/* Current Turn Time Remaining Badge for Player */}
+          {isMyTurn && (
+            <div className="flex items-center justify-between w-full max-w-md px-1 mb-1">
+              <span className="text-[11px] font-medium text-yellow-400 flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> Lượt của bạn
+              </span>
+              <span
+                className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                  turnTimeLeft <= 5
+                    ? 'bg-red-950 text-red-400 border border-red-800 animate-pulse'
+                    : 'bg-yellow-400/20 text-yellow-300 border border-yellow-500/40'
+                }`}
+              >
+                Còn lại: {turnTimeLeft}s
+              </span>
+            </div>
+          )}
+
           {/* Action Control Buttons */}
           <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-2 w-full max-w-md">
             <button

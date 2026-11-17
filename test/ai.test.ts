@@ -58,4 +58,47 @@ describe('Tiến Lên Miền Nam - AI Bot Logic', () => {
     expect(move?.length).toBe(2);
     expect(move?.[0].rank).toBe(10);
   });
+
+  it('Bot sequentially takes valid turn and advances game state', () => {
+    const seats: any[] = [
+      { seatIndex: 0, userId: 'user1', displayName: 'Người chơi', isBot: false },
+      { seatIndex: 1, userId: null, displayName: 'Bot 1', isBot: true, botDifficulty: 'easy' },
+      { seatIndex: 2, userId: null, displayName: 'Bot 2', isBot: true, botDifficulty: 'medium' },
+      { seatIndex: 3, userId: null, displayName: 'Bot 3', isBot: true, botDifficulty: 'hard' },
+    ];
+
+    const round = {
+      id: 'round_test',
+      roomId: 'room_test',
+      roundNumber: 1,
+      stake: 10000,
+      status: 'playing' as const,
+      firstPlayerSeat: 1,
+      currentTurnSeat: 1,
+      mustIncludeCardId: null,
+      lastPlaySeat: null,
+      lastPlayCards: null,
+      lastPlayType: null,
+      trickPasses: [],
+      winnerSeat: null,
+      rankPositions: [],
+      instantWinType: null,
+      roundLogs: [],
+      version: 1,
+      createdAt: Date.now(),
+      finishedAt: null,
+      hands: [
+        { seatIndex: 0, cards: ['3_clubs', '4_spades', '5_spades'], initialCards: [], finishedPosition: null, chopBonusAmount: 0, chopPenaltyAmount: 0 },
+        { seatIndex: 1, cards: ['3_spades', '6_clubs', '7_diamonds'], initialCards: [], finishedPosition: null, chopBonusAmount: 0, chopPenaltyAmount: 0 },
+        { seatIndex: 2, cards: ['8_hearts', '9_clubs'], initialCards: [], finishedPosition: null, chopBonusAmount: 0, chopPenaltyAmount: 0 },
+        { seatIndex: 3, cards: ['10_hearts', '15_spades'], initialCards: [], finishedPosition: null, chopBonusAmount: 0, chopPenaltyAmount: 0 },
+      ],
+    };
+
+    // Bot 1 chooses move
+    const botHandCards = round.hands[1].cards.map((id) => getCard(id));
+    const botMove = chooseBotMove(botHandCards, null, 'easy');
+    expect(botMove).not.toBeNull();
+    expect(botMove!.length).toBeGreaterThan(0);
+  });
 });

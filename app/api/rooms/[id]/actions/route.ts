@@ -8,6 +8,7 @@ import {
   configureBotSeat,
   kickSeat,
   startRoomMatch,
+  executeSingleBotStep,
   submitPlayAction,
   submitPassAction,
   getClientRoomState,
@@ -34,6 +35,7 @@ const actionSchema = z.discriminatedUnion('action', [
     seatIndex: z.number().int().min(0).max(3),
   }),
   z.object({ action: z.literal('start') }),
+  z.object({ action: z.literal('botStep') }),
   z.object({
     action: z.literal('play'),
     cardIds: z.array(z.string()).min(1).max(13),
@@ -108,6 +110,12 @@ export async function POST(
         await startRoomMatch({
           roomId,
           hostUserId: user.id,
+        });
+        break;
+
+      case 'botStep':
+        await executeSingleBotStep({
+          roomId,
         });
         break;
 

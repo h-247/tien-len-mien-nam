@@ -566,11 +566,8 @@ export async function startRoomMatch(params: {
     .where(eq(rooms.id, room.id));
 
   // If instant win occurred during deal, finalize settlement immediately
-  if (roundState.status === 'finished') {
+  if ((roundState.status as string) === 'finished') {
     await finalizeRoundSettlement(roundState, seatInfos);
-  } else {
-    // If starting turn is a bot, run bot turns
-    await advanceBotTurnsIfNeeded(roundState, seatInfos);
   }
 
   return { roundId };
@@ -606,11 +603,8 @@ export async function submitPlayAction(params: {
     throw new Error(playRes.error || 'Nước đi không hợp lệ.');
   }
 
-  if (roundState.status === 'finished') {
+  if ((roundState.status as string) === 'finished') {
     await finalizeRoundSettlement(roundState, seatInfos);
-  } else {
-    // Advance bot turns if next is bot
-    await advanceBotTurnsIfNeeded(roundState, seatInfos);
   }
 
   // Persist updated round state
@@ -646,11 +640,8 @@ export async function submitPassAction(params: {
     throw new Error(passRes.error || 'Không thể bỏ lượt.');
   }
 
-  if (roundState.status === 'finished') {
+  if ((roundState.status as string) === 'finished') {
     await finalizeRoundSettlement(roundState, seatInfos);
-  } else {
-    // Advance bot turns if next is bot
-    await advanceBotTurnsIfNeeded(roundState, seatInfos);
   }
 
   // Persist updated round state
@@ -658,55 +649,72 @@ export async function submitPassAction(params: {
 }
 
 /**
- * Executes turns for AI bots until a human player's turn or round finish is reached.
+ * Executes a single turn for the bot at the current turn seat.
  */
-async function advanceBotTurnsIfNeeded(state: RoundState, seats: SeatInfo[]) {
-  let safetyLoopLimit = 60; // Max moves in a game
-
-  while (state.status === 'playing' && safetyLoopLimit > 0) {
-    safetyLoopLimit--;
-    const currentSeat = seats[state.currentTurnSeat];
-    if (!currentSeat.isBot) {
-      // Reached human turn
-      break;
-    }
-
-    const botHandCards = getCards(state.hands[state.currentTurnSeat].cards);
-    const currentTrick =
-      state.lastPlayCards && state.lastPlayCards.length > 0
-        ? identifyCombination(getCards(state.lastPlayCards))
-        : null;
-
-    const minOpponentCardCount = Math.min(
-      ...state.hands
-        .filter((h) => h.seatIndex !== state.currentTurnSeat && h.finishedPosition === null)
-        .map((h) => h.cards.length)
-    );
-
-    const botMove = chooseBotMove(
-      botHandCards,
-      currentTrick,
-      currentSeat.botDifficulty || 'medium',
-      state.mustIncludeCardId || undefined,
-      minOpponentCardCount
-    );
-
-    if (botMove && botMove.length > 0) {
-      executePlay(
-        state,
-        state.currentTurnSeat,
-        botMove.map((c) => c.id),
-        seats
-      );
-    } else {
-      executePass(state, state.currentTurnSeat, seats);
-    }
-
-    if ((state.status as string) === 'finished') {
-      await finalizeRoundSettlement(state, seats);
-      break;
-    }
+export async function executeSingleBotStep(params: { roomId: string }) {
+  const db = await getAppDb();
+  const room = await db.query.rooms.findFirst({
+    where: eq(rooms.id, params.roomId),
+  });
+  if (!room || !room.currentRoundId) {
+    return null;
   }
+
+  const { roundState, seatInfos } = await loadRoundState(room.currentRoundId);
+  if (roundState.status !== 'playing') {
+    return roundState;
+  }
+
+  const currentSeat = seatInfos[roundState.currentTurnSeat];
+  if (!currentSeat || !currentSeat.isBot) {
+    return roundState;
+  }
+
+  const botHandCards = getCards(roundState.hands[roundState.currentTurnSeat].cards);
+  const currentTrick =
+    roundState.lastPlayCards && roundState.lastPlayCards.length > 0
+      ? identifyCombination(getCards(roundState.lastPlayCards))
+      : null;
+
+  const minOpponentCardCount = Math.min(
+    ...roundState.hands
+      .filter((h) => h.seatIndex !== roundState.currentTurnSeat && h.finishedPosition === null)
+      .map((h) => h.cards.length)
+  );
+
+  const botMove = chooseBotMove(
+    botHandCards,
+    currentTrick,
+    currentSeat.botDifficulty || 'medium',
+    roundState.mustIncludeCardId || undefined,
+    minOpponentCardCount
+  );
+
+  if (botMove && botMove.length > 0) {
+    const playRes = executePlay(
+      roundState,
+      roundState.currentTurnSeat,
+      botMove.map((c) => c.id),
+      seatInfos
+    );
+    if (!playRes.success) {
+      if (currentTrick) {
+        executePass(roundState, roundState.currentTurnSeat, seatInfos);
+      } else {
+        const fallbackCardId = roundState.mustIncludeCardId || roundState.hands[roundState.currentTurnSeat].cards[0];
+        executePlay(roundState, roundState.currentTurnSeat, [fallbackCardId], seatInfos);
+      }
+    }
+  } else {
+    executePass(roundState, roundState.currentTurnSeat, seatInfos);
+  }
+
+  if ((roundState.status as string) === 'finished') {
+    await finalizeRoundSettlement(roundState, seatInfos);
+  }
+
+  await saveRoundState(roundState);
+  return roundState;
 }
 
 async function finalizeRoundSettlement(state: RoundState, seats: SeatInfo[]) {
@@ -805,7 +813,10 @@ async function loadRoundState(roundId: string): Promise<{ roundState: RoundState
     status: round.status as 'playing' | 'finished',
     currentTurnSeat: round.currentTurnSeat,
     firstPlayerSeat: round.firstPlayerSeat,
-    mustIncludeCardId: round.roundNumber === 1 && !round.lastPlayCards ? '3_spades' : null,
+    mustIncludeCardId:
+      round.roundNumber === 1 && !round.lastPlayCards && playerHands.every((h) => h.cards.length === 13)
+        ? '3_spades'
+        : null,
     lastPlaySeat: round.lastPlaySeat,
     lastPlayCards: round.lastPlayCards ? JSON.parse(round.lastPlayCards) : null,
     lastPlayType: round.lastPlayType as any,
