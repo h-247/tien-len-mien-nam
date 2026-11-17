@@ -34,6 +34,24 @@ export const AdminView: React.FC = () => {
   const [adjustAmount, setAdjustAmount] = useState<number>(100000);
   const [adjustReason, setAdjustReason] = useState<string>('');
 
+  const handleSeedAccounts = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/dev/seed', { method: 'POST' });
+      const data = (await res.json()) as any;
+      if (res.ok) {
+        setMessage({ type: 'success', text: `Nạp thành công ${data.total || 13} tài khoản mẫu vào hệ thống!` });
+        await loadData();
+      } else {
+        throw new Error(data.error || 'Nạp tài khoản thất bại.');
+      }
+    } catch (e: any) {
+      setMessage({ type: 'error', text: e.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -179,13 +197,24 @@ export const AdminView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={loadData}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-white border border-neutral-700 transition-colors"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Làm mới dữ liệu</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSeedAccounts}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/60 text-xs font-semibold text-emerald-300 border border-emerald-800/60 transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Nạp tài khoản mẫu (Seed)</span>
+          </button>
+
+          <button
+            onClick={loadData}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-white border border-neutral-700 transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Làm mới dữ liệu</span>
+          </button>
+        </div>
       </div>
 
       {message && (

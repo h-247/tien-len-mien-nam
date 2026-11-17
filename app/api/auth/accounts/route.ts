@@ -3,6 +3,7 @@ import { getAppDb } from '@/lib/server/db';
 import { users, profiles, wallets, transactions } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { z } from 'zod';
+import { seedAllAccounts } from '@/lib/server/seed-helper';
 
 const createAccountSchema = z.object({
   displayName: z.string().trim().min(2, 'Tên hiển thị phải có ít nhất 2 ký tự.').max(30),
@@ -15,66 +16,9 @@ const createAccountSchema = z.object({
 export async function GET() {
   try {
     const db = await getAppDb();
-    const now = Date.now();
 
-    // Ensure default demo accounts exist
-    const defaultAccounts = [
-      { id: 'local_seedy', email: 'seedy@sites.test', name: 'Quản trị viên (Seedy)', role: 'admin', balance: 10000000 },
-      { id: 'player1', email: 'player1@sites.test', name: 'Nguyễn Văn A', role: 'player', balance: 1000000 },
-      { id: 'player2', email: 'player2@sites.test', name: 'Trần Thị B', role: 'player', balance: 1000000 },
-      { id: 'player3', email: 'player3@sites.test', name: 'Lê Văn C', role: 'player', balance: 1000000 },
-      { id: 'player4', email: 'player4@sites.test', name: 'Phạm Thị D', role: 'player', balance: 1000000 },
-    ];
-
-    for (const acc of defaultAccounts) {
-      const existing = await db.query.users.findFirst({
-        where: eq(users.id, acc.id),
-      });
-
-      if (!existing) {
-        await db.insert(users).values({
-          id: acc.id,
-          email: acc.email,
-          fullName: acc.name,
-          role: acc.role as any,
-          status: 'approved',
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        await db.insert(profiles).values({
-          userId: acc.id,
-          displayName: acc.name,
-          avatarUrl: null,
-          bio: acc.role === 'admin' ? 'Quản trị viên hệ thống' : 'Người chơi Tiến Lên Miền Nam',
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        await db.insert(wallets).values({
-          id: `wallet_${acc.id}`,
-          userId: acc.id,
-          balance: acc.balance,
-          totalWon: 0,
-          totalLost: 0,
-          matchesPlayed: 0,
-          matchesWon: 0,
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        await db.insert(transactions).values({
-          id: `tx_${now}_${acc.id}`,
-          walletId: `wallet_${acc.id}`,
-          userId: acc.id,
-          amount: acc.balance,
-          balanceAfter: acc.balance,
-          type: 'STARTING_GRANT',
-          description: 'Vốn khởi nghiệp mặc định',
-          createdAt: now,
-        });
-      }
-    }
+    // Ensure seed accounts exist
+    await seedAllAccounts(db);
 
     // Fetch all accounts
     const allUsers = await db.query.users.findMany({
