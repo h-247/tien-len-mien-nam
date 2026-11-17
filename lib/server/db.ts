@@ -193,7 +193,17 @@ export async function getAppDb() {
 
   if (!initialized) {
     try {
-      await env.DB.exec(INIT_SQL);
+      const statements = INIT_SQL.replace(/\r\n/g, '\n')
+        .split(';')
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      for (const stmt of statements) {
+        try {
+          await env.DB.exec(stmt);
+        } catch (_) {}
+      }
+
       try {
         await env.DB.exec('ALTER TABLE users ADD COLUMN password_hash text;');
       } catch (_) {}

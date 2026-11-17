@@ -114,6 +114,55 @@ CREATE TABLE IF NOT EXISTS game_rounds (
 	FOREIGN KEY (room_id) REFERENCES rooms(id) ON UPDATE no action ON DELETE cascade
 );
 
+CREATE TABLE IF NOT EXISTS room_invitations (
+	id text PRIMARY KEY NOT NULL,
+	room_id text NOT NULL,
+	inviter_user_id text NOT NULL,
+	invitee_user_id text NOT NULL,
+	status text DEFAULT 'pending' NOT NULL,
+	created_at integer NOT NULL,
+	FOREIGN KEY (room_id) REFERENCES rooms(id) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (inviter_user_id) REFERENCES users(id) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (invitee_user_id) REFERENCES users(id) ON UPDATE no action ON DELETE cascade
+);
+CREATE INDEX IF NOT EXISTS idx_room_invitations_invitee ON room_invitations (invitee_user_id);
+CREATE INDEX IF NOT EXISTS idx_room_invitations_room ON room_invitations (room_id);
+
+CREATE TABLE IF NOT EXISTS game_hands (
+	id text PRIMARY KEY NOT NULL,
+	round_id text NOT NULL,
+	seat_index integer NOT NULL,
+	cards text NOT NULL,
+	initial_cards text NOT NULL,
+	finished_position integer,
+	created_at integer NOT NULL,
+	updated_at integer NOT NULL,
+	FOREIGN KEY (round_id) REFERENCES game_rounds(id) ON UPDATE no action ON DELETE cascade
+);
+CREATE INDEX IF NOT EXISTS idx_game_hands_round_id ON game_hands (round_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_game_hands_round_seat ON game_hands (round_id, seat_index);
+
+CREATE TABLE IF NOT EXISTS game_settlements (
+	id text PRIMARY KEY NOT NULL,
+	round_id text NOT NULL UNIQUE,
+	room_id text NOT NULL,
+	stake integer NOT NULL,
+	settlement_data text NOT NULL,
+	total_chop_bonuses integer DEFAULT 0 NOT NULL,
+	total_penalties integer DEFAULT 0 NOT NULL,
+	created_at integer NOT NULL,
+	FOREIGN KEY (round_id) REFERENCES game_rounds(id) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (room_id) REFERENCES rooms(id) ON UPDATE no action ON DELETE cascade
+);
+CREATE INDEX IF NOT EXISTS idx_game_settlements_room_id ON game_settlements (room_id);
+CREATE INDEX IF NOT EXISTS idx_game_settlements_created_at ON game_settlements (created_at);
+
+CREATE TABLE IF NOT EXISTS system_settings (
+	key text PRIMARY KEY NOT NULL,
+	value text NOT NULL,
+	updated_at integer NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
 	id text PRIMARY KEY NOT NULL,
 	admin_user_id text NOT NULL,
@@ -335,7 +384,10 @@ export function seedDatabase(dbPath) {
   const db = new Database(dbPath);
 
   // Execute table creation
-  db.exec(INIT_SQL);
+  const statements = INIT_SQL.replace(/\r\n/g, '\n').split(';').map(s => s.trim()).filter(Boolean);
+  for (const s of statements) {
+    try { db.exec(s); } catch (_) {}
+  }
   try { db.exec('ALTER TABLE users ADD COLUMN password_hash text;'); } catch (_) {}
   try { db.exec('ALTER TABLE users ADD COLUMN username text;'); } catch (_) {}
   try { db.exec('CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);'); } catch (_) {}
