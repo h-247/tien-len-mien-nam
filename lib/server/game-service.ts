@@ -116,6 +116,57 @@ export async function createRoom(params: {
   return { roomId, code };
 }
 
+export async function createQuickBotRoom(params: {
+  hostUserId: string;
+  stake?: number;
+  difficulty?: 'easy' | 'medium' | 'hard' | 'mixed';
+}) {
+  const { roomId } = await createRoom({
+    hostUserId: params.hostUserId,
+    name: 'Đấu luyện cùng 3 Bot AI',
+    stake: params.stake || 10000,
+    visibility: 'private',
+  });
+
+  const diff = params.difficulty || 'mixed';
+  const botConfigs = [
+    {
+      seatIndex: 1,
+      diff: diff === 'mixed' ? 'easy' : diff,
+      name: diff === 'mixed' ? 'Bot Tập Sự' : `Bot ${diff}`,
+    },
+    {
+      seatIndex: 2,
+      diff: diff === 'mixed' ? 'medium' : diff,
+      name: diff === 'mixed' ? 'Bot Cao Thủ' : `Bot ${diff}`,
+    },
+    {
+      seatIndex: 3,
+      diff: diff === 'mixed' ? 'hard' : diff,
+      name: diff === 'mixed' ? 'Bot Thần Bài' : `Bot ${diff}`,
+    },
+  ];
+
+  for (const b of botConfigs) {
+    await configureBotSeat({
+      roomId,
+      hostUserId: params.hostUserId,
+      seatIndex: b.seatIndex,
+      action: 'add',
+      difficulty: b.diff as any,
+      botName: b.name,
+    });
+  }
+
+  // Start the match immediately
+  await startRoomMatch({
+    roomId,
+    hostUserId: params.hostUserId,
+  });
+
+  return { roomId };
+}
+
 export async function joinRoom(params: {
   roomId?: string;
   code?: string;

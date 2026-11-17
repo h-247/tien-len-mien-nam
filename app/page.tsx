@@ -100,6 +100,22 @@ export default function Home() {
     setActiveRoomId(roomId);
   };
 
+  const handlePlayWithBots = async () => {
+    try {
+      const res = await fetch('/api/rooms/quick-bot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stake: 10000, difficulty: 'mixed' }),
+      });
+      const data = (await res.json()) as any;
+      if (res.ok && data.roomId) {
+        setActiveRoomId(data.roomId);
+      }
+    } catch (e) {
+      console.error('Failed to create bot room:', e);
+    }
+  };
+
   const handleLeaveRoom = async () => {
     if (activeRoomId) {
       try {
@@ -178,6 +194,7 @@ export default function Home() {
         }}
         onRefresh={fetchUser}
         onCreateRoomClick={() => setCreateDialogOpen(true)}
+        onPlayWithBots={handlePlayWithBots}
       />
 
       <main className="flex-1 px-3 sm:px-6 py-4 sm:py-6">

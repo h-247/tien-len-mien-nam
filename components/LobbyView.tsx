@@ -11,6 +11,7 @@ import {
   Lock,
   Globe,
   Coins,
+  Bot,
 } from 'lucide-react';
 
 interface RoomSummary {
@@ -40,7 +41,27 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [roomCodeInput, setRoomCodeInput] = useState('');
   const [joiningCode, setJoiningCode] = useState(false);
+  const [playingBot, setPlayingBot] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const handlePlayWithBots = async () => {
+    try {
+      setPlayingBot(true);
+      setError(null);
+      const res = await fetch('/api/rooms/quick-bot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stake: 10000, difficulty: 'mixed' }),
+      });
+      const data = (await res.json()) as any;
+      if (!res.ok) throw new Error(data.error || 'Không thể tạo phòng với Bot.');
+      onJoinRoom(data.roomId);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setPlayingBot(false);
+    }
+  };
 
   const fetchRooms = async () => {
     try {
@@ -115,6 +136,15 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
           </button>
 
           <button
+            onClick={handlePlayWithBots}
+            disabled={playingBot}
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-2.5 text-sm font-bold transition-colors shadow-sm disabled:opacity-50"
+          >
+            <Bot className="w-4 h-4" />
+            <span>{playingBot ? 'Đang vào...' : 'Chơi với Bot'}</span>
+          </button>
+
+          <button
             onClick={onCreateRoomClick}
             className="flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-black hover:bg-neutral-200 transition-colors shadow-sm"
           >
@@ -177,13 +207,23 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
           <p className="text-xs sm:text-sm text-neutral-400 max-w-sm mx-auto">
             Hiện tại không có phòng đang chờ. Hãy tạo một phòng mới và mời bạn bè hoặc ghép với Bot!
           </p>
-          <button
-            onClick={onCreateRoomClick}
-            className="inline-flex items-center gap-2 mt-2 px-4 py-2 rounded-xl bg-white text-black font-semibold text-xs sm:text-sm hover:bg-neutral-200 transition-colors"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>Tạo phòng đầu tiên</span>
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+            <button
+              onClick={handlePlayWithBots}
+              disabled={playingBot}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs sm:text-sm transition-colors shadow-sm disabled:opacity-50"
+            >
+              <Bot className="w-4 h-4" />
+              <span>{playingBot ? 'Đang vào...' : 'Chơi ngay với 3 Bot'}</span>
+            </button>
+            <button
+              onClick={onCreateRoomClick}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-black font-semibold text-xs sm:text-sm hover:bg-neutral-200 transition-colors"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Tạo phòng đầu tiên</span>
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">

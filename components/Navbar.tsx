@@ -13,6 +13,7 @@ import {
   X,
   RefreshCw,
   PlusCircle,
+  Bot,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -21,6 +22,7 @@ interface NavbarProps {
   onTabChange: (tab: string) => void;
   onRefresh?: () => void;
   onCreateRoomClick?: () => void;
+  onPlayWithBots?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -29,6 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onTabChange,
   onRefresh,
   onCreateRoomClick,
+  onPlayWithBots,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [switchingUser, setSwitchingUser] = useState(false);
@@ -148,6 +151,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           )}
 
+          {user?.status === 'approved' && onPlayWithBots && (
+            <button
+              onClick={onPlayWithBots}
+              className="hidden sm:flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white hover:bg-purple-500 transition-colors shadow-sm"
+            >
+              <Bot className="w-4 h-4" />
+              <span>Chơi với Bot</span>
+            </button>
+          )}
+
           {user?.status === 'approved' && onCreateRoomClick && (
             <button
               onClick={onCreateRoomClick}
@@ -196,6 +209,16 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Mobile Dropdown Navigation */}
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-[#383838] bg-[#262626] px-4 py-3 space-y-2">
+          {user?.status === 'approved' && onPlayWithBots && (
+            <button
+              onClick={onPlayWithBots}
+              className="hidden sm:flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white hover:bg-purple-500 transition-colors shadow-sm"
+            >
+              <Bot className="w-4 h-4" />
+              <span>Chơi với Bot</span>
+            </button>
+          )}
+
           {user?.status === 'approved' && onCreateRoomClick && (
             <button
               onClick={() => {
