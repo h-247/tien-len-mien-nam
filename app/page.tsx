@@ -13,6 +13,8 @@ import { LeaderboardView } from '@/components/LeaderboardView';
 import { WalletView } from '@/components/WalletView';
 import { RulesView } from '@/components/RulesView';
 import { AdminView } from '@/components/AdminView';
+import { SignInView } from '@/components/SignInView';
+import { AddAccountModal } from '@/components/AddAccountModal';
 
 export default function Home() {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
@@ -23,6 +25,7 @@ export default function Home() {
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [roomState, setRoomState] = useState<ClientRoomState | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [addAccountModalOpen, setAddAccountModalOpen] = useState(false);
 
   // Load authenticated user
   const fetchUser = useCallback(async () => {
@@ -142,25 +145,7 @@ export default function Home() {
 
   // Not signed in
   if (!user) {
-    return (
-      <div className="min-h-screen bg-[#212121] flex flex-col items-center justify-center p-4 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-white text-black font-black flex items-center justify-center text-3xl shadow-xl mb-4">
-          TL
-        </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-2">
-          Tiến Lên Miền Nam Online
-        </h1>
-        <p className="text-sm text-neutral-400 max-w-sm mb-6 leading-relaxed">
-          Đấu bài trực tuyến cùng bạn bè hoặc luyện tập với AI Bot. Vui lòng đăng nhập qua ChatGPT để bắt đầu.
-        </p>
-        <a
-          href="/signin-with-chatgpt?return_to=/"
-          className="px-6 py-3 rounded-xl bg-white hover:bg-neutral-200 text-black font-bold text-sm shadow-md transition-colors"
-        >
-          Đăng nhập bằng ChatGPT
-        </a>
-      </div>
-    );
+    return <SignInView onSignedIn={fetchUser} />;
   }
 
   // If user is not yet approved
@@ -172,10 +157,16 @@ export default function Home() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           onRefresh={fetchUser}
+          onAddAccountClick={() => setAddAccountModalOpen(true)}
         />
         <main className="flex-1 px-4 py-6">
           <RegistrationView user={user} onSuccess={fetchUser} />
         </main>
+        <AddAccountModal
+          isOpen={addAccountModalOpen}
+          onClose={() => setAddAccountModalOpen(false)}
+          onSuccess={() => fetchUser()}
+        />
       </div>
     );
   }
@@ -195,6 +186,7 @@ export default function Home() {
         onRefresh={fetchUser}
         onCreateRoomClick={() => setCreateDialogOpen(true)}
         onPlayWithBots={handlePlayWithBots}
+        onAddAccountClick={() => setAddAccountModalOpen(true)}
       />
 
       <main className="flex-1 px-3 sm:px-6 py-4 sm:py-6">
@@ -240,6 +232,12 @@ export default function Home() {
         onCreated={(newRoomId) => {
           setActiveRoomId(newRoomId);
         }}
+      />
+
+      <AddAccountModal
+        isOpen={addAccountModalOpen}
+        onClose={() => setAddAccountModalOpen(false)}
+        onSuccess={() => fetchUser()}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthenticatedUser } from '@/lib/server/auth';
 import {
   Trophy,
@@ -14,7 +14,15 @@ import {
   RefreshCw,
   PlusCircle,
   Bot,
+  UserPlus,
 } from 'lucide-react';
+
+interface AccountOption {
+  id: string;
+  displayName: string;
+  role: string;
+  balance: number;
+}
 
 interface NavbarProps {
   user: AuthenticatedUser | null;
@@ -23,6 +31,7 @@ interface NavbarProps {
   onRefresh?: () => void;
   onCreateRoomClick?: () => void;
   onPlayWithBots?: () => void;
+  onAddAccountClick?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -32,9 +41,22 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRefresh,
   onCreateRoomClick,
   onPlayWithBots,
+  onAddAccountClick,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [switchingUser, setSwitchingUser] = useState(false);
+  const [accounts, setAccounts] = useState<AccountOption[]>([]);
+
+  useEffect(() => {
+    fetch('/api/auth/accounts')
+      .then((res) => res.json())
+      .then((data: any) => {
+        if (data.accounts) {
+          setAccounts(data.accounts);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const formatVND = (amount: number) => {
     return amount.toLocaleString('vi-VN') + ' ₫';
@@ -48,6 +70,16 @@ export const Navbar: React.FC<NavbarProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: targetId, role, displayName }),
       });
+      window.location.reload();
+    } finally {
+      setSwitchingUser(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    setSwitchingUser(true);
+    try {
+      await fetch('/api/auth/signout', { method: 'POST' });
       window.location.reload();
     } finally {
       setSwitchingUser(false);
@@ -171,28 +203,64 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Quick Dev Switcher for testing */}
-          <div className="relative group">
+          {/* Dev Switcher & Add Account */}
+          <div className="flex items-center gap-1.5">
             <select
-              aria-label="Chuyển tài khoản thử nghiệm"
+              aria-label="Chuyển tài khoản đăng nhập"
               disabled={switchingUser}
               onChange={(e) => {
                 const val = e.target.value;
-                if (val === 'admin') handleDevSwitch('local_seedy', 'admin', 'Quản trị viên');
-                else if (val === 'player1') handleDevSwitch('player1', 'player', 'Nguyễn Văn A');
-                else if (val === 'player2') handleDevSwitch('player2', 'player', 'Trần Thị B');
-                else if (val === 'player3') handleDevSwitch('player3', 'player', 'Lê Văn C');
-                else if (val === 'player4') handleDevSwitch('player4', 'player', 'Phạm Thị D');
+                if (val === '__add_new__') {
+                  onAddAccountClick?.();
+                  return;
+                }
+                if (val === '__sign_out__') {
+                  handleSignOut();
+                  return;
+                }
+                const found = accounts.find((a) => a.id === val);
+                if (found) {
+                  handleDevSwitch(found.id, found.role, found.displayName);
+                } else if (val) {
+                  handleDevSwitch(val);
+                }
               }}
-              value={user?.role === 'admin' ? 'admin' : user?.id || ''}
-              className="text-xs bg-[#1A1A1A] text-neutral-300 border border-[#383838] rounded-md px-2 py-1 focus:outline-none cursor-pointer"
+              value={user?.id || ''}
+              className="text-xs bg-[#1A1A1A] text-neutral-300 border border-[#383838] rounded-md px-2 py-1.5 focus:outline-none cursor-pointer max-w-[130px] sm:max-w-[180px] truncate"
             >
-              <option value="admin">👤 Admin (Seedy)</option>
-              <option value="player1">🎮 Người chơi 1 (A)</option>
-              <option value="player2">🎮 Người chơi 2 (B)</option>
-              <option value="player3">🎮 Người chơi 3 (C)</option>
-              <option value="player4">🎮 Người chơi 4 (D)</option>
+              {accounts.length > 0 ? (
+                <optgroup label="Tài khoản">
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.role === 'admin' ? '🛡️' : '🎮'} {acc.displayName}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : (
+                <optgroup label="Tài khoản mặc định">
+                  <option value="local_seedy">🛡️ Admin (Seedy)</option>
+                  <option value="player1">🎮 Nguyễn Văn A</option>
+                  <option value="player2">🎮 Trần Thị B</option>
+                  <option value="player3">🎮 Lê Văn C</option>
+                  <option value="player4">🎮 Phạm Thị D</option>
+                </optgroup>
+              )}
+              <optgroup label="Thao tác">
+                <option value="__add_new__">➕ Thêm tài khoản...</option>
+                <option value="__sign_out__">🚪 Đổi tài khoản...</option>
+              </optgroup>
             </select>
+
+            {onAddAccountClick && (
+              <button
+                onClick={onAddAccountClick}
+                title="Thêm tài khoản mới"
+                className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[#1A1A1A] hover:bg-neutral-800 text-amber-400 border border-[#383838] transition-colors text-xs font-semibold"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span className="hidden lg:inline">+ Thêm tài khoản</span>
+              </button>
+            )}
           </div>
 
           {/* Mobile menu toggle button */}
@@ -299,14 +367,30 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
+          {onAddAccountClick && (
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onAddAccountClick();
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm text-amber-400 hover:bg-neutral-800 transition-colors"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>+ Thêm tài khoản mới</span>
+            </button>
+          )}
+
           <div className="pt-2 border-t border-neutral-700">
-            <a
-              href="/signout-with-chatgpt"
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                handleSignOut();
+              }}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm text-neutral-400 hover:text-red-400"
             >
               <LogOut className="w-4 h-4" />
-              <span>Đăng xuất</span>
-            </a>
+              <span>Đăng xuất / Đổi tài khoản</span>
+            </button>
           </div>
         </div>
       )}
