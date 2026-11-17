@@ -1,17 +1,47 @@
 import net from 'node:net';
 import { spawn, exec } from 'node:child_process';
 
-function isPortAvailable(port) {
+function testPortBind(port, host) {
   return new Promise((resolve) => {
     const server = net.createServer();
-    server.once('error', (err) => {
-      resolve(false);
-    });
+    server.once('error', () => resolve(false));
     server.once('listening', () => {
       server.close(() => resolve(true));
     });
-    server.listen(port, '127.0.0.1');
+    server.listen(port, host);
   });
+}
+
+function testPortConnect(port, host) {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(250);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.once('error', () => {
+      resolve(false);
+    });
+    socket.connect(port, host);
+  });
+}
+
+async function isPortAvailable(port) {
+  if (await testPortConnect(port, '127.0.0.1')) return false;
+  if (await testPortConnect(port, '::1')) return false;
+  if (await testPortConnect(port, 'localhost')) return false;
+
+  const canBind4 = await testPortBind(port, '127.0.0.1');
+  if (!canBind4) return false;
+  const canBindAll = await testPortBind(port, '0.0.0.0');
+  if (!canBindAll) return false;
+
+  return true;
 }
 
 async function findAvailablePort(startPort = 3000) {

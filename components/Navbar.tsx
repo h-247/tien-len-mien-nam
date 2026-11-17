@@ -246,21 +246,29 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </optgroup>
               )}
               <optgroup label="Thao tác">
-                <option value="__add_new__">➕ Thêm tài khoản...</option>
-                <option value="__sign_out__">🚪 Đổi tài khoản...</option>
+                <option value="__add_new__">➕ Đăng ký tài khoản mới (Chờ duyệt)...</option>
+                <option value="__sign_out__">🚪 Đăng xuất / Đổi tài khoản...</option>
               </optgroup>
             </select>
 
             {onAddAccountClick && (
               <button
                 onClick={onAddAccountClick}
-                title="Thêm tài khoản mới"
-                className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[#1A1A1A] hover:bg-neutral-800 text-amber-400 border border-[#383838] transition-colors text-xs font-semibold"
+                title="Đăng ký tài khoản mới có mật khẩu để Quản trị viên duyệt"
+                className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-amber-400/10 hover:bg-amber-400/20 text-amber-400 border border-amber-400/30 transition-colors text-xs font-semibold"
               >
                 <UserPlus className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">+ Thêm tài khoản</span>
+                <span className="hidden md:inline">+ Đăng ký duyệt</span>
               </button>
             )}
+
+            <button
+              onClick={handleSignOut}
+              title="Đăng xuất tài khoản"
+              className="p-1.5 rounded-md bg-[#1A1A1A] hover:bg-neutral-800 text-neutral-400 hover:text-red-400 border border-[#383838] transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           {/* Mobile menu toggle button */}
