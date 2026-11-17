@@ -1,0 +1,81 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --radius: 0.625rem;
+}
+
+:root {
+  --background: #212121;
+  --foreground: #ECECEC;
+  --card: #262626;
+  --card-foreground: #ECECEC;
+  --popover: #262626;
+  --popover-foreground: #ECECEC;
+  --primary: #FFFFFF;
+  --primary-foreground: #141414;
+  --secondary: #2E2E2E;
+  --secondary-foreground: #ECECEC;
+  --muted: #282828;
+  --muted-foreground: #9E9E9E;
+  --accent: #333333;
+  --accent-foreground: #FFFFFF;
+  --destructive: #EF4444;
+  --border: #383838;
+  --input: #1A1A1A;
+  --ring: #737373;
+}
+
+.dark {
+  --background: #212121;
+  --foreground: #ECECEC;
+  --card: #262626;
+  --card-foreground: #ECECEC;
+  --popover: #262626;
+  --popover-foreground: #ECECEC;
+  --primary: #FFFFFF;
+  --primary-foreground: #141414;
+  --secondary: #2E2E2E;
+  --secondary-foreground: #ECECEC;
+  --muted: #282828;
+  --muted-foreground: #9E9E9E;
+  --accent: #333333;
+  --accent-foreground: #FFFFFF;
+  --destructive: #EF4444;
+  --border: #383838;
+  --input: #1A1A1A;
+  --ring: #737373;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    background-color: #212121;
+    color: #ECECEC;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+}
