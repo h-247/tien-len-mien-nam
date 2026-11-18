@@ -15,6 +15,7 @@ import { RulesView } from '@/components/RulesView';
 import { AdminView } from '@/components/AdminView';
 import { SignInView } from '@/components/SignInView';
 import { AddAccountModal } from '@/components/AddAccountModal';
+import { PlayWithBotsModal } from '@/components/PlayWithBotsModal';
 
 export default function Home() {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
@@ -26,6 +27,7 @@ export default function Home() {
   const [roomState, setRoomState] = useState<ClientRoomState | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [addAccountModalOpen, setAddAccountModalOpen] = useState(false);
+  const [playWithBotsOpen, setPlayWithBotsOpen] = useState(false);
 
   // Load authenticated user
   const fetchUser = useCallback(async () => {
@@ -103,19 +105,26 @@ export default function Home() {
     setActiveRoomId(roomId);
   };
 
-  const handlePlayWithBots = async () => {
-    try {
-      const res = await fetch('/api/rooms/quick-bot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stake: 10000, difficulty: 'mixed' }),
-      });
-      const data = (await res.json()) as any;
-      if (res.ok && data.roomId) {
-        setActiveRoomId(data.roomId);
-      }
-    } catch (e) {
-      console.error('Failed to create bot room:', e);
+  const handlePlayWithBots = () => {
+    setPlayWithBotsOpen(true);
+  };
+
+  const handleStartPlayWithBots = async (params: {
+    botCount: number;
+    stake: number;
+    difficulty: 'easy' | 'medium' | 'hard' | 'mixed';
+  }) => {
+    const res = await fetch('/api/rooms/quick-bot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = (await res.json()) as any;
+    if (!res.ok) {
+      throw new Error(data.error || 'Không thể tạo phòng đấu với Bot.');
+    }
+    if (data.roomId) {
+      setActiveRoomId(data.roomId);
     }
   };
 
@@ -212,6 +221,7 @@ export default function Home() {
               <LobbyView
                 onJoinRoom={handleJoinRoom}
                 onCreateRoomClick={() => setCreateDialogOpen(true)}
+                onPlayWithBotsClick={() => setPlayWithBotsOpen(true)}
               />
             )}
 
@@ -238,6 +248,12 @@ export default function Home() {
         isOpen={addAccountModalOpen}
         onClose={() => setAddAccountModalOpen(false)}
         onSuccess={() => fetchUser()}
+      />
+
+      <PlayWithBotsModal
+        isOpen={playWithBotsOpen}
+        onClose={() => setPlayWithBotsOpen(false)}
+        onPlay={handleStartPlayWithBots}
       />
     </div>
   );

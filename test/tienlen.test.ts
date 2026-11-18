@@ -362,4 +362,30 @@ describe('Tiến Lên Miền Nam - Zero-Sum Settlement Invariant', () => {
     expect(settlement.players[0].netChange).toBeGreaterThan(0); // Winner gained
     expect(settlement.players[3].netChange).toBeLessThan(0); // 4th lost
   });
+
+  it('correctly initializes and plays round with 2 players (1 vs 1)', () => {
+    const seats: SeatInfo[] = [
+      { seatIndex: 0, userId: 'u1', displayName: 'Người chơi 1', isBot: false },
+      { seatIndex: 1, userId: null, displayName: 'Bot 1', isBot: true },
+    ];
+    const round = initializeRound('r_2p', 'room_2p', 1, 10000, seats, undefined, 42);
+    expect(round.hands.length).toBe(2);
+    expect(round.hands[0].cards.length).toBe(13);
+    expect(round.hands[1].cards.length).toBe(13);
+    expect([0, 1]).toContain(round.currentTurnSeat);
+  });
+
+  it('correctly initializes and plays round with 3 players (1 vs 2)', () => {
+    const seats: SeatInfo[] = [
+      { seatIndex: 0, userId: 'u1', displayName: 'Người chơi 1', isBot: false },
+      { seatIndex: 1, userId: null, displayName: 'Bot 1', isBot: true },
+      { seatIndex: 2, userId: null, displayName: 'Bot 2', isBot: true },
+    ];
+    const round = initializeRound('r_3p', 'room_3p', 1, 10000, seats, undefined, 99);
+    expect(round.hands.length).toBe(3);
+    expect(round.hands[0].cards.length).toBe(13);
+    expect(round.hands[1].cards.length).toBe(13);
+    expect(round.hands[2].cards.length).toBe(13);
+    expect([0, 1, 2]).toContain(round.currentTurnSeat);
+  });
 });

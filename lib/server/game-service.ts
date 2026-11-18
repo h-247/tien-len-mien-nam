@@ -42,6 +42,7 @@ export interface ClientRoomState {
     status: 'waiting' | 'ready' | 'playing' | 'finished' | 'closed';
     visibility: 'public' | 'private';
     currentRoundId: string | null;
+    isSimulated?: boolean;
   };
   mySeatIndex: number | null;
   seats: (PublicSeatState | null)[];
@@ -120,10 +121,12 @@ export async function createQuickBotRoom(params: {
   hostUserId: string;
   stake?: number;
   difficulty?: 'easy' | 'medium' | 'hard' | 'mixed';
+  botCount?: number;
 }) {
+  const botCount = params.botCount && params.botCount >= 1 && params.botCount <= 3 ? params.botCount : 3;
   const { roomId } = await createRoom({
     hostUserId: params.hostUserId,
-    name: 'Đấu luyện cùng 3 Bot AI',
+    name: `Đấu luyện cùng ${botCount} Bot AI (Mô phỏng)`,
     stake: params.stake || 10000,
     visibility: 'private',
   });
@@ -147,7 +150,8 @@ export async function createQuickBotRoom(params: {
     },
   ];
 
-  for (const b of botConfigs) {
+  for (let i = 0; i < botCount; i++) {
+    const b = botConfigs[i];
     await configureBotSeat({
       roomId,
       hostUserId: params.hostUserId,
@@ -451,39 +455,49 @@ export async function startRoomMatch(params: {
     where: eq(roomSeats.roomId, room.id),
   });
 
-  if (seats.length !== 4) {
-    throw new Error('Cần đúng 4 người chơi (hoặc thêm Bot) để bắt đầu.');
+  const isBotRoom = seats.filter((s) => !s.isBot).length <= 1 && seats.some((s) => s.isBot);
+
+  if (isBotRoom) {
+    if (seats.length < 2 || seats.length > 4) {
+      throw new Error('Cần từ 2 đến 4 người chơi (hoặc Bot) để bắt đầu.');
+    }
+  } else {
+    if (seats.length !== 4) {
+      throw new Error('Cần đúng 4 người chơi (hoặc thêm Bot) để bắt đầu.');
+    }
   }
 
-  // Verify all human players accepted stake and have sufficient balance
-  for (const s of seats) {
-    if (!s.isBot && s.userId) {
-      if (!s.stakeAccepted) {
-        throw new Error('Tất cả người chơi phải chấp nhận mức cược trước khi bắt đầu.');
-      }
-      const wallet = await db.query.wallets.findFirst({
-        where: eq(wallets.userId, s.userId),
-      });
-      const required = room.stake * 5;
-      if (!wallet || wallet.balance < required) {
-        throw new Error(`Người chơi tại vị trí ${s.seatIndex + 1} không đủ số dư tối thiểu (${required.toLocaleString('vi-VN')} ₫).`);
+  // Verify all human players accepted stake and have sufficient balance (PvP only)
+  if (!isBotRoom) {
+    for (const s of seats) {
+      if (!s.isBot && s.userId) {
+        if (!s.stakeAccepted) {
+          throw new Error('Tất cả người chơi phải chấp nhận mức cược trước khi bắt đầu.');
+        }
+        const wallet = await db.query.wallets.findFirst({
+          where: eq(wallets.userId, s.userId),
+        });
+        const required = room.stake * 5;
+        if (!wallet || wallet.balance < required) {
+          throw new Error(`Người chơi tại vị trí ${s.seatIndex + 1} không đủ số dư tối thiểu (${required.toLocaleString('vi-VN')} ₫).`);
+        }
       }
     }
   }
 
   // Load seat display names
   const seatInfos: SeatInfo[] = [];
-  for (let i = 0; i < 4; i++) {
-    const s = seats.find((seat) => seat.seatIndex === i)!;
-    let displayName = s.botName || `Bot ${i + 1}`;
+  const sortedSeats = [...seats].sort((a, b) => a.seatIndex - b.seatIndex);
+  for (const s of sortedSeats) {
+    let displayName = s.botName || `Bot ${s.seatIndex + 1}`;
     if (!s.isBot && s.userId) {
       const p = await db.query.profiles.findFirst({
         where: eq(profiles.userId, s.userId),
       });
-      displayName = p?.displayName || `Người chơi ${i + 1}`;
+      displayName = p?.displayName || `Người chơi ${s.seatIndex + 1}`;
     }
     seatInfos.push({
-      seatIndex: i,
+      seatIndex: s.seatIndex,
       userId: s.userId,
       displayName,
       isBot: s.isBot,
@@ -719,14 +733,18 @@ export async function executeSingleBotStep(params: { roomId: string }) {
 
 async function finalizeRoundSettlement(state: RoundState, seats: SeatInfo[]) {
   const db = await getAppDb();
-  // Build SeatRoundData for settlement calculation
   const seatRoundData: SeatRoundData[] = [];
+  const isBotRoom = seats.filter((s) => !s.isBot).length <= 1 && seats.some((s) => s.isBot);
 
-  for (let s = 0; s < 4; s++) {
-    const hand = state.hands[s];
-    const seatInfo = seats[s];
-    let balance = 1000000;
-    if (seatInfo.userId) {
+  for (const hand of state.hands) {
+    const seatInfo = seats.find((st) => st.seatIndex === hand.seatIndex) || {
+      seatIndex: hand.seatIndex,
+      userId: null,
+      displayName: `Ghế ${hand.seatIndex + 1}`,
+      isBot: true,
+    };
+    let balance = isBotRoom ? 5000000 : 1000000;
+    if (!isBotRoom && seatInfo.userId) {
       const wallet = await db.query.wallets.findFirst({
         where: eq(wallets.userId, seatInfo.userId),
       });
@@ -734,12 +752,12 @@ async function finalizeRoundSettlement(state: RoundState, seats: SeatInfo[]) {
     }
 
     seatRoundData.push({
-      seatIndex: s,
+      seatIndex: hand.seatIndex,
       userId: seatInfo.userId,
       displayName: seatInfo.displayName,
       isBot: seatInfo.isBot,
       currentBalance: balance,
-      finishedPosition: hand.finishedPosition || 4,
+      finishedPosition: hand.finishedPosition || state.hands.length,
       remainingCards: getCards(hand.cards),
       chopBonusAmount: hand.chopBonusAmount,
       chopPenaltyAmount: hand.chopPenaltyAmount,
@@ -748,8 +766,8 @@ async function finalizeRoundSettlement(state: RoundState, seats: SeatInfo[]) {
 
   const settlement = calculateSettlement(state.stake, seatRoundData, state.instantWinType || undefined);
 
-  // Record settlement into database & wallet transactions
-  await recordRoundSettlement(state.id, state.roomId, settlement);
+  // Record settlement into database & wallet transactions (isSimulated = isBotRoom)
+  await recordRoundSettlement(state.id, state.roomId, settlement, isBotRoom);
 
   // Update room status to finished
   await db
@@ -769,8 +787,16 @@ async function loadRoundState(roundId: string): Promise<{ roundState: RoundState
     where: eq(roomSeats.roomId, round.roomId),
   });
 
+  const hands = await db.query.gameHands.findMany({
+    where: eq(gameHands.roundId, round.id),
+  });
+
+  const seatIndices = Array.from(
+    new Set([...dbSeats.map((s) => s.seatIndex), ...hands.map((h) => h.seatIndex)])
+  ).sort((a, b) => a - b);
+
   const seatInfos: SeatInfo[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (const i of seatIndices) {
     const s = dbSeats.find((seat) => seat.seatIndex === i);
     let displayName = s?.botName || `Ghế ${i + 1}`;
     if (s && !s.isBot && s.userId) {
@@ -788,18 +814,15 @@ async function loadRoundState(roundId: string): Promise<{ roundState: RoundState
     });
   }
 
-  const hands = await db.query.gameHands.findMany({
-    where: eq(gameHands.roundId, round.id),
-  });
-
   const playerHands: PlayerHandState[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (const i of seatIndices) {
     const h = hands.find((hand) => hand.seatIndex === i);
+    if (!h) continue;
     playerHands.push({
       seatIndex: i,
-      cards: h ? JSON.parse(h.cards) : [],
-      initialCards: h ? JSON.parse(h.initialCards) : [],
-      finishedPosition: h?.finishedPosition || null,
+      cards: JSON.parse(h.cards),
+      initialCards: JSON.parse(h.initialCards),
+      finishedPosition: h.finishedPosition ?? null,
       chopBonusAmount: 0,
       chopPenaltyAmount: 0,
     });
@@ -876,6 +899,8 @@ export async function getClientRoomState(roomId: string, currentUserId: string):
     where: eq(roomSeats.roomId, roomId),
   });
 
+  const isBotRoom = dbSeats.filter((s) => !s.isBot).length <= 1 && dbSeats.some((s) => s.isBot);
+
   let mySeatIndex: number | null = null;
   const publicSeats: (PublicSeatState | null)[] = [null, null, null, null];
 
@@ -919,9 +944,9 @@ export async function getClientRoomState(roomId: string, currentUserId: string):
 
           let displayName = s.botName || `Bot ${i + 1}`;
           let avatarUrl = null;
-          let balance = 1000000;
+          let balance = isBotRoom ? 5000000 : 1000000;
 
-          if (!s.isBot && s.userId) {
+          if (!s.isBot && s.userId && !isBotRoom) {
             const p = await db.query.profiles.findFirst({
               where: eq(profiles.userId, s.userId),
             });
@@ -933,6 +958,14 @@ export async function getClientRoomState(roomId: string, currentUserId: string):
               where: eq(wallets.userId, s.userId),
             });
             if (w) balance = w.balance;
+          } else if (!s.isBot && s.userId && isBotRoom) {
+            const p = await db.query.profiles.findFirst({
+              where: eq(profiles.userId, s.userId),
+            });
+            if (p) {
+              displayName = p.displayName;
+              avatarUrl = p.avatarUrl;
+            }
           }
 
           const h = hands.find((hand) => hand.seatIndex === i);
@@ -972,9 +1005,9 @@ export async function getClientRoomState(roomId: string, currentUserId: string):
 
         let displayName = s.botName || `Bot ${i + 1}`;
         let avatarUrl = null;
-        let balance = 1000000;
+        let balance = isBotRoom ? 5000000 : 1000000;
 
-        if (!s.isBot && s.userId) {
+        if (!s.isBot && s.userId && !isBotRoom) {
           const p = await db.query.profiles.findFirst({
             where: eq(profiles.userId, s.userId),
           });
@@ -986,6 +1019,14 @@ export async function getClientRoomState(roomId: string, currentUserId: string):
             where: eq(wallets.userId, s.userId),
           });
           if (w) balance = w.balance;
+        } else if (!s.isBot && s.userId && isBotRoom) {
+          const p = await db.query.profiles.findFirst({
+            where: eq(profiles.userId, s.userId),
+          });
+          if (p) {
+            displayName = p.displayName;
+            avatarUrl = p.avatarUrl;
+          }
         }
 
         publicSeats[i] = {
@@ -1016,6 +1057,7 @@ export async function getClientRoomState(roomId: string, currentUserId: string):
       status: room.status as any,
       visibility: room.visibility as any,
       currentRoundId: room.currentRoundId,
+      isSimulated: isBotRoom,
     },
     mySeatIndex,
     seats: publicSeats,

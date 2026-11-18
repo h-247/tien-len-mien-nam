@@ -134,4 +134,81 @@ describe('Settlement & Ledger Financial Correctness', () => {
     const netSum = result.players.reduce((sum, p) => sum + p.netChange, 0);
     expect(netSum).toBe(0);
   });
+
+  it('calculates zero-sum settlement correctly for 2 players (Solo 1 vs 1)', () => {
+    const stake = 20000;
+    const seats: SeatRoundData[] = [
+      {
+        seatIndex: 0,
+        userId: 'p1',
+        displayName: 'Người chơi',
+        isBot: false,
+        currentBalance: 5000000,
+        finishedPosition: 1,
+        remainingCards: [],
+        chopBonusAmount: 0,
+        chopPenaltyAmount: 0,
+      },
+      {
+        seatIndex: 1,
+        userId: null,
+        displayName: 'Bot Tập Sự',
+        isBot: true,
+        currentBalance: 5000000,
+        finishedPosition: 2,
+        remainingCards: [getCard('4_spades'), getCard('5_clubs')],
+        chopBonusAmount: 0,
+        chopPenaltyAmount: 0,
+      },
+    ];
+
+    const result = calculateSettlement(stake, seats);
+    const netSum = result.players.reduce((sum, p) => sum + p.netChange, 0);
+    expect(netSum).toBe(0);
+    expect(result.players[0].netChange).toBe(20000);
+    expect(result.players[1].netChange).toBe(-20000);
+  });
+
+  it('calculates zero-sum settlement correctly for 3 players', () => {
+    const stake = 10000;
+    const seats: SeatRoundData[] = [
+      {
+        seatIndex: 0,
+        userId: 'p1',
+        displayName: 'Người chơi',
+        isBot: false,
+        currentBalance: 5000000,
+        finishedPosition: 1,
+        remainingCards: [],
+        chopBonusAmount: 0,
+        chopPenaltyAmount: 0,
+      },
+      {
+        seatIndex: 1,
+        userId: null,
+        displayName: 'Bot 1',
+        isBot: true,
+        currentBalance: 5000000,
+        finishedPosition: 2,
+        remainingCards: [getCard('4_spades')],
+        chopBonusAmount: 0,
+        chopPenaltyAmount: 0,
+      },
+      {
+        seatIndex: 2,
+        userId: null,
+        displayName: 'Bot 2',
+        isBot: true,
+        currentBalance: 5000000,
+        finishedPosition: 3,
+        remainingCards: [getCard('7_diamonds'), getCard('8_hearts')],
+        chopBonusAmount: 0,
+        chopPenaltyAmount: 0,
+      },
+    ];
+
+    const result = calculateSettlement(stake, seats);
+    const netSum = result.players.reduce((sum, p) => sum + p.netChange, 0);
+    expect(netSum).toBe(0);
+  });
 });

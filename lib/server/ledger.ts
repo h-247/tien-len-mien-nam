@@ -87,7 +87,8 @@ export async function applyBalanceChange(params: BalanceChangeParams) {
 export async function recordRoundSettlement(
   roundId: string,
   roomId: string,
-  settlement: SettlementResult
+  settlement: SettlementResult,
+  isSimulated = false
 ) {
   const db = await getAppDb();
   const now = Date.now();
@@ -104,6 +105,11 @@ export async function recordRoundSettlement(
     totalPenalties: settlement.players.reduce((s, p) => s + p.thoiPenalties, 0),
     createdAt: now,
   });
+
+  // If match with bots (simulation mode): money is simulated, do NOT modify real wallet or transactions!
+  if (isSimulated) {
+    return;
+  }
 
   // Apply balance change and match statistics for each human player
   for (const p of settlement.players) {

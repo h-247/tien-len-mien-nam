@@ -30,11 +30,13 @@ interface RoomSummary {
 interface LobbyViewProps {
   onJoinRoom: (roomId: string) => void;
   onCreateRoomClick: () => void;
+  onPlayWithBotsClick?: () => void;
 }
 
 export const LobbyView: React.FC<LobbyViewProps> = ({
   onJoinRoom,
   onCreateRoomClick,
+  onPlayWithBotsClick,
 }) => {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,7 +138,7 @@ export const LobbyView: React.FC<LobbyViewProps> = ({
           </button>
 
           <button
-            onClick={handlePlayWithBots}
+            onClick={onPlayWithBotsClick || handlePlayWithBots}
             disabled={playingBot}
             className="flex items-center justify-center gap-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white px-3.5 py-2.5 text-sm font-bold transition-colors shadow-sm disabled:opacity-50"
           >

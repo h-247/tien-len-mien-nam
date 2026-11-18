@@ -1,5 +1,5 @@
 import { Card, Combination, CombinationType, InstantWinType, Rank } from './types';
-import { getCard, getCards, shuffleDeck, sortCardsByRank } from './cards';
+import { getCard, getCards, shuffleDeck, sortCardsByRank, compareCards } from './cards';
 import { identifyCombination, compareCombinations, checkInstantWin, getComboNameVi } from './combinations';
 import { CHOP_BOUNTIES } from './penalties';
 
@@ -56,15 +56,17 @@ export function initializeRound(
   seed?: number
 ): RoundState {
   const deck = shuffleDeck(seed);
+  const numSeats = seats.length;
 
-  // Deal 13 cards to 4 seats
+  // Deal 13 cards to active seats
   const hands: PlayerHandState[] = [];
-  for (let s = 0; s < 4; s++) {
+  for (let s = 0; s < numSeats; s++) {
+    const seatIdx = seats[s].seatIndex;
     const dealtCards = deck.slice(s * 13, (s + 1) * 13);
     const sorted = sortCardsByRank(dealtCards);
     const cardIds = sorted.map((c) => c.id);
     hands.push({
-      seatIndex: s,
+      seatIndex: seatIdx,
       cards: cardIds,
       initialCards: [...cardIds],
       finishedPosition: null,
@@ -76,10 +78,10 @@ export function initializeRound(
   // Check for instant win (Tới trắng)
   let instantWinSeat: number | null = null;
   let instantWinType: InstantWinType | null = null;
-  for (let s = 0; s < 4; s++) {
+  for (let s = 0; s < numSeats; s++) {
     const win = checkInstantWin(getCards(hands[s].cards));
     if (win) {
-      instantWinSeat = s;
+      instantWinSeat = hands[s].seatIndex;
       instantWinType = win;
       break;
     }
@@ -89,14 +91,17 @@ export function initializeRound(
   roundLogs.push(`Bắt đầu ván #${roundNumber}. Mức cược: ${stake.toLocaleString('vi-VN')} ₫.`);
 
   if (instantWinType && instantWinSeat !== null) {
-    const seatName = seats[instantWinSeat].displayName;
-    roundLogs.push(`🎉 ${seatName} TỚI TRẮNG (${getInstantWinNameVi(instantWinType)})!`);
+    const winnerSeatInfo = seats.find((st) => st.seatIndex === instantWinSeat)!;
+    roundLogs.push(`🎉 ${winnerSeatInfo.displayName} TỚI TRẮNG (${getInstantWinNameVi(instantWinType)})!`);
 
-    hands[instantWinSeat].finishedPosition = 1;
-    const remainingSeats = [0, 1, 2, 3].filter((s) => s !== instantWinSeat);
-    hands[remainingSeats[0]].finishedPosition = 2;
-    hands[remainingSeats[1]].finishedPosition = 3;
-    hands[remainingSeats[2]].finishedPosition = 4;
+    const winHand = hands.find((h) => h.seatIndex === instantWinSeat)!;
+    winHand.finishedPosition = 1;
+    const remainingHands = hands.filter((h) => h.seatIndex !== instantWinSeat);
+    const remainingSeats: number[] = [];
+    remainingHands.forEach((h, idx) => {
+      h.finishedPosition = idx + 2;
+      remainingSeats.push(h.seatIndex);
+    });
 
     return {
       id: roundId,
@@ -123,22 +128,47 @@ export function initializeRound(
   }
 
   // Determine starting player
-  let firstSeat = 0;
+  let firstSeat = hands[0].seatIndex;
   let mustInclude: string | null = null;
 
   if (roundNumber === 1 || lastWinnerSeat === undefined || lastWinnerSeat === null) {
-    // Find seat holding 3 of spades
-    for (let s = 0; s < 4; s++) {
-      if (hands[s].cards.includes('3_spades')) {
-        firstSeat = s;
+    // Check if any seat holds 3 of spades
+    for (const h of hands) {
+      if (h.cards.includes('3_spades')) {
+        firstSeat = h.seatIndex;
         mustInclude = '3_spades';
         break;
       }
     }
-    roundLogs.push(`${seats[firstSeat].displayName} giữ 3 Bích và đánh trước.`);
+
+    if (mustInclude === null) {
+      // In 2 or 3-player game, 3_spades might be among undealt cards.
+      // In that case, player holding lowest card overall leads!
+      let lowestCard: Card | null = null;
+      let lowestSeat = hands[0].seatIndex;
+      for (const h of hands) {
+        const playerCards = getCards(h.cards);
+        for (const c of playerCards) {
+          if (!lowestCard || compareCards(c, lowestCard) < 0) {
+            lowestCard = c;
+            lowestSeat = h.seatIndex;
+          }
+        }
+      }
+      if (lowestCard) {
+        firstSeat = lowestSeat;
+        mustInclude = lowestCard.id;
+        const seatName = seats.find((s) => s.seatIndex === firstSeat)?.displayName || `Ghế ${firstSeat + 1}`;
+        roundLogs.push(`${seatName} giữ quân bài nhỏ nhất (${lowestCard.name}) và đánh trước.`);
+      }
+    } else {
+      const seatName = seats.find((s) => s.seatIndex === firstSeat)?.displayName || `Ghế ${firstSeat + 1}`;
+      roundLogs.push(`${seatName} giữ 3 Bích và đánh trước.`);
+    }
   } else {
     firstSeat = lastWinnerSeat;
-    roundLogs.push(`${seats[firstSeat].displayName} thắng ván trước và đánh trước.`);
+    const seatName = seats.find((s) => s.seatIndex === firstSeat)?.displayName || `Ghế ${firstSeat + 1}`;
+    roundLogs.push(`${seatName} thắng ván trước và đánh trước.`);
   }
 
   return {
@@ -293,14 +323,15 @@ export function executePlay(
     }
   }
 
-  // Check if round is finished (3 players finished, or only 1 remaining)
+  // Check if round is finished (all players except 1 finished)
   const remainingActivePlayers = state.hands.filter((h) => h.finishedPosition === null);
   if (remainingActivePlayers.length <= 1) {
     if (remainingActivePlayers.length === 1) {
       const lastSeat = remainingActivePlayers[0].seatIndex;
-      remainingActivePlayers[0].finishedPosition = 4;
+      remainingActivePlayers[0].finishedPosition = state.hands.length;
       state.rankPositions.push(lastSeat);
-      state.roundLogs.push(`💩 ${seats[lastSeat].displayName} về BÉT!`);
+      const lastSeatName = seats.find((s) => s.seatIndex === lastSeat)?.displayName || `Ghế ${lastSeat + 1}`;
+      state.roundLogs.push(`💩 ${lastSeatName} về BÉT!`);
     }
     state.status = 'finished';
     state.finishedAt = Date.now();
@@ -340,22 +371,23 @@ export function executePass(
     state.trickPasses.push(seatIndex);
   }
 
-  const playerDisplayName = seats[seatIndex].displayName;
+  const playerDisplayName = seats.find((s) => s.seatIndex === seatIndex)?.displayName || `Ghế ${seatIndex + 1}`;
   state.roundLogs.push(`${playerDisplayName} bỏ lượt.`);
 
   // Check if trick is finished
   // A trick finishes if all active players (not finished) have passed except lastPlaySeat,
   // or if lastPlaySeat has finished and all other active players have passed
-  const activeUnfinishedSeats = [0, 1, 2, 3].filter(
-    (s) => state.hands[s].finishedPosition === null
-  );
+  const activeUnfinishedSeats = state.hands
+    .filter((h) => h.finishedPosition === null)
+    .map((h) => h.seatIndex);
 
   const nonPassedSeats = activeUnfinishedSeats.filter(
     (s) => !state.trickPasses.includes(s) && s !== state.lastPlaySeat
   );
 
   // If lastPlaySeat has finished, and everyone else passed
-  const lastPlaySeatFinished = state.hands[state.lastPlaySeat!].finishedPosition !== null;
+  const lastPlayHand = state.hands.find((h) => h.seatIndex === state.lastPlaySeat);
+  const lastPlaySeatFinished = lastPlayHand ? lastPlayHand.finishedPosition !== null : false;
 
   if (nonPassedSeats.length === 0) {
     // Trick is over!
@@ -364,14 +396,16 @@ export function executePass(
     state.lastPlayCards = null;
     state.lastPlayType = null;
 
-    if (!lastPlaySeatFinished) {
+    if (!lastPlaySeatFinished && state.lastPlaySeat !== null) {
       // Trick winner leads the new trick
-      state.currentTurnSeat = state.lastPlaySeat!;
-      state.roundLogs.push(`${seats[state.currentTurnSeat].displayName} bắt đầu vòng mới.`);
+      state.currentTurnSeat = state.lastPlaySeat;
+      const turnName = seats.find((s) => s.seatIndex === state.currentTurnSeat)?.displayName || `Ghế ${state.currentTurnSeat + 1}`;
+      state.roundLogs.push(`${turnName} bắt đầu vòng mới.`);
     } else {
       // Last player finished, pass lead to next active player clockwise
-      state.currentTurnSeat = getNextActiveSeatClockwise(state, state.lastPlaySeat!);
-      state.roundLogs.push(`${seats[state.currentTurnSeat].displayName} được nhường lượt mở vòng mới.`);
+      state.currentTurnSeat = getNextActiveSeatClockwise(state, state.lastPlaySeat ?? seatIndex);
+      const turnName = seats.find((s) => s.seatIndex === state.currentTurnSeat)?.displayName || `Ghế ${state.currentTurnSeat + 1}`;
+      state.roundLogs.push(`${turnName} được nhường lượt mở vòng mới.`);
     }
     state.lastPlaySeat = null;
   } else {
@@ -384,16 +418,20 @@ export function executePass(
 }
 
 function advanceTurnAfterPlay(state: RoundState) {
-  // Move clockwise to next active player who hasn't passed in this trick and hasn't finished
-  let next = (state.currentTurnSeat + 1) % 4;
+  const allSeatIndices = state.hands.map((h) => h.seatIndex);
+  const currentIdx = allSeatIndices.indexOf(state.currentTurnSeat);
+  const numSeats = allSeatIndices.length;
+
+  let nextIdx = (currentIdx + 1) % numSeats;
   let count = 0;
-  while (count < 4) {
-    const hand = state.hands[next];
-    if (hand.finishedPosition === null && !state.trickPasses.includes(next)) {
-      state.currentTurnSeat = next;
+  while (count < numSeats) {
+    const seat = allSeatIndices[nextIdx];
+    const hand = state.hands.find((h) => h.seatIndex === seat);
+    if (hand && hand.finishedPosition === null && !state.trickPasses.includes(seat)) {
+      state.currentTurnSeat = seat;
       return;
     }
-    next = (next + 1) % 4;
+    nextIdx = (nextIdx + 1) % numSeats;
     count++;
   }
 
@@ -401,35 +439,47 @@ function advanceTurnAfterPlay(state: RoundState) {
   state.trickPasses = [];
   state.lastPlayCards = null;
   state.lastPlayType = null;
-  if (state.hands[state.lastPlaySeat!].finishedPosition === null) {
-    state.currentTurnSeat = state.lastPlaySeat!;
+  const lastPlayHand = state.hands.find((h) => h.seatIndex === state.lastPlaySeat);
+  if (lastPlayHand && lastPlayHand.finishedPosition === null && state.lastPlaySeat !== null) {
+    state.currentTurnSeat = state.lastPlaySeat;
   } else {
-    state.currentTurnSeat = getNextActiveSeatClockwise(state, state.lastPlaySeat!);
+    state.currentTurnSeat = getNextActiveSeatClockwise(state, state.lastPlaySeat ?? state.currentTurnSeat);
   }
   state.lastPlaySeat = null;
 }
 
 function advanceTurn(state: RoundState) {
-  let next = (state.currentTurnSeat + 1) % 4;
+  const allSeatIndices = state.hands.map((h) => h.seatIndex);
+  const currentIdx = allSeatIndices.indexOf(state.currentTurnSeat);
+  const numSeats = allSeatIndices.length;
+
+  let nextIdx = (currentIdx + 1) % numSeats;
   let count = 0;
-  while (count < 4) {
-    const hand = state.hands[next];
-    if (hand.finishedPosition === null && !state.trickPasses.includes(next)) {
-      state.currentTurnSeat = next;
+  while (count < numSeats) {
+    const seat = allSeatIndices[nextIdx];
+    const hand = state.hands.find((h) => h.seatIndex === seat);
+    if (hand && hand.finishedPosition === null && !state.trickPasses.includes(seat)) {
+      state.currentTurnSeat = seat;
       return;
     }
-    next = (next + 1) % 4;
+    nextIdx = (nextIdx + 1) % numSeats;
     count++;
   }
 }
 
 function getNextActiveSeatClockwise(state: RoundState, fromSeat: number): number {
-  let next = (fromSeat + 1) % 4;
-  for (let i = 0; i < 4; i++) {
-    if (state.hands[next].finishedPosition === null) {
-      return next;
+  const allSeatIndices = state.hands.map((h) => h.seatIndex);
+  const currentIdx = allSeatIndices.indexOf(fromSeat);
+  const numSeats = allSeatIndices.length;
+
+  let nextIdx = (currentIdx + 1) % numSeats;
+  for (let i = 0; i < numSeats; i++) {
+    const seat = allSeatIndices[nextIdx];
+    const hand = state.hands.find((h) => h.seatIndex === seat);
+    if (hand && hand.finishedPosition === null) {
+      return seat;
     }
-    next = (next + 1) % 4;
+    nextIdx = (nextIdx + 1) % numSeats;
   }
   return fromSeat;
 }

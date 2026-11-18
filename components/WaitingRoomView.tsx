@@ -41,11 +41,13 @@ export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   const occupiedSeatsCount = seats.filter((s) => s !== null).length;
+  const isSimulated = room.isSimulated || (seats.filter((s) => s && !s.isBot).length <= 1 && seats.some((s) => s && s.isBot));
+  const hasEnoughPlayers = isSimulated ? occupiedSeatsCount >= 2 : occupiedSeatsCount === 4;
   const allSeatsFull = occupiedSeatsCount === 4;
   const allHumansAccepted = seats.every(
     (s) => s === null || s.isBot || s.stakeAccepted
   );
-  const canStartMatch = isHost && allSeatsFull && allHumansAccepted;
+  const canStartMatch = isHost && hasEnoughPlayers && allHumansAccepted;
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(room.code);
@@ -149,7 +151,13 @@ export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
             </span>
           </div>
           <p className="text-xs text-neutral-400 mt-1">
-            Đủ 4 người chơi và thống nhất mức cược để chủ phòng bắt đầu ván đấu.
+            {isSimulated ? (
+              <span className="text-purple-300 font-medium">
+                🤖 Phòng đấu tập với Bot — Tiền cược là MÔ PHỎNG (không ảnh hưởng tới ví thật).
+              </span>
+            ) : (
+              'Đủ 4 người chơi và thống nhất mức cược để chủ phòng bắt đầu ván đấu.'
+            )}
           </p>
         </div>
 
@@ -392,12 +400,12 @@ export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
       {/* Start Match Action Panel */}
       <div className="p-4 sm:p-5 rounded-2xl bg-[#262626] border border-[#383838] flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="text-xs text-neutral-400 text-center sm:text-left">
-          {!allSeatsFull && (
+          {!hasEnoughPlayers && (
             <p className="text-amber-400 font-medium">
-              ⚠️ Cần đủ 4 người chơi để bắt đầu ván (Chủ phòng có thể thêm Bot vào ghế trống).
+              ⚠️ Cần ít nhất 2 người chơi (hoặc thêm Bot) để bắt đầu ván.
             </p>
           )}
-          {allSeatsFull && !allHumansAccepted && (
+          {hasEnoughPlayers && !allHumansAccepted && (
             <p className="text-amber-400 font-medium">
               ⚠️ Đang chờ tất cả người chơi thực đồng ý với mức cược {room.stake.toLocaleString('vi-VN')} ₫.
             </p>

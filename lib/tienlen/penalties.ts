@@ -10,12 +10,25 @@ export const CHOP_BOUNTIES = {
   bon_doi_thong: 2.0, // 2.0x stake
 };
 
-export const BASE_PAYOUT_MULTIPLIERS = {
-  1: 3.5, // 1st
-  2: -0.5, // 2nd
-  3: -1.0, // 3rd
-  4: -2.0, // 4th
+export const BASE_PAYOUT_MULTIPLIERS_BY_PLAYERS: Record<number, Record<number, number>> = {
+  2: {
+    1: 1.0,
+    2: -1.0,
+  },
+  3: {
+    1: 2.0,
+    2: -0.5,
+    3: -1.5,
+  },
+  4: {
+    1: 3.5,
+    2: -0.5,
+    3: -1.0,
+    4: -2.0,
+  },
 };
+
+export const BASE_PAYOUT_MULTIPLIERS: Record<number, number> = BASE_PAYOUT_MULTIPLIERS_BY_PLAYERS[4];
 
 /**
  * Checks cards left in hand for "Thối heo" or "Thối hàng".
@@ -113,7 +126,9 @@ export function calculateSettlement(
     const isCong = !isWinner && seat.remainingCards.length === 13;
     const pos = seat.finishedPosition as 1 | 2 | 3 | 4;
 
-    let baseMult = BASE_PAYOUT_MULTIPLIERS[pos] ?? 0;
+    const numPlayers = seats.length;
+    const multipliers = BASE_PAYOUT_MULTIPLIERS_BY_PLAYERS[numPlayers] || BASE_PAYOUT_MULTIPLIERS;
+    let baseMult = multipliers[pos] ?? 0;
     const penalties: PenaltyDetail[] = [];
 
     if (isCong) {

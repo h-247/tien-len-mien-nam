@@ -253,19 +253,45 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
     }
   }, [turnTimeLeft, isMyTurn, round, loading, myCards, mySeatIndex, onAction]);
 
-  // Relative seat mapping for 4-player table:
-  // Bottom: Current player (seat 0 in view)
-  // Left: Next seat clockwise ((mySeatIndex + 1) % 4)
-  // Top: Opposite seat ((mySeatIndex + 2) % 4)
-  // Right: Previous seat clockwise ((mySeatIndex + 3) % 4)
+  // Relative seat mapping for 2, 3, or 4-player table:
   const myIndex = mySeatIndex !== null ? mySeatIndex : 0;
-  const leftSeatIndex = (myIndex + 1) % 4;
-  const topSeatIndex = (myIndex + 2) % 4;
-  const rightSeatIndex = (myIndex + 3) % 4;
+  const activeSeats = seats.filter((s): s is PublicSeatState => s !== null);
+  const numActiveSeats = activeSeats.length;
 
-  const leftSeat = seats[leftSeatIndex];
-  const topSeat = seats[topSeatIndex];
-  const rightSeat = seats[rightSeatIndex];
+  let leftSeat: PublicSeatState | null = null;
+  let topSeat: PublicSeatState | null = null;
+  let rightSeat: PublicSeatState | null = null;
+  let leftSeatIndex = -1;
+  let topSeatIndex = -1;
+  let rightSeatIndex = -1;
+
+  if (numActiveSeats === 2) {
+    // 2 players: opponent sits across at Top
+    const opponent = activeSeats.find((s) => s.seatIndex !== myIndex);
+    if (opponent) {
+      topSeat = opponent;
+      topSeatIndex = opponent.seatIndex;
+    }
+  } else if (numActiveSeats === 3) {
+    // 3 players: opponents sit on Left and Right
+    const others = activeSeats.filter((s) => s.seatIndex !== myIndex);
+    if (others[0]) {
+      leftSeat = others[0];
+      leftSeatIndex = others[0].seatIndex;
+    }
+    if (others[1]) {
+      rightSeat = others[1];
+      rightSeatIndex = others[1].seatIndex;
+    }
+  } else {
+    // 4 players (or default)
+    leftSeatIndex = (myIndex + 1) % 4;
+    topSeatIndex = (myIndex + 2) % 4;
+    rightSeatIndex = (myIndex + 3) % 4;
+    leftSeat = seats[leftSeatIndex] || null;
+    topSeat = seats[topSeatIndex] || null;
+    rightSeat = seats[rightSeatIndex] || null;
+  }
   const mySeat = seats[myIndex];
 
   // Helper to render an opponent's card count & status badge
@@ -352,7 +378,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
           <span className="font-bold text-white truncate">{room.name}</span>
           <span className="text-neutral-400 font-mono">#{room.code}</span>
           <span className="text-amber-400 font-bold hidden sm:inline">
-            Cược: {room.stake.toLocaleString('vi-VN')} ₫
+            Cược: {room.stake.toLocaleString('vi-VN')} ₫ {room.isSimulated ? '(Mô phỏng)' : ''}
           </span>
         </div>
 
@@ -569,9 +595,14 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
             <h2 className="text-xl sm:text-2xl font-extrabold text-white mb-1">
               {round.instantWinType ? 'TỚI TRẮNG!' : 'Kết thúc ván đấu!'}
             </h2>
-            <p className="text-xs text-neutral-400 mb-4">
-              Mức cược: {round.stake.toLocaleString('vi-VN')} ₫
+            <p className="text-xs text-neutral-400 mb-1">
+              Mức cược: {round.stake.toLocaleString('vi-VN')} ₫ {room.isSimulated ? '(Mô phỏng)' : ''}
             </p>
+            {room.isSimulated && (
+              <p className="text-[11px] text-purple-300 font-medium mb-3">
+                🤖 Ván đấu luyện cùng Bot: Tiền cược là mô phỏng (không ảnh hưởng tới ví thật).
+              </p>
+            )}
 
             {/* Results Table */}
             <div className="bg-[#1A1A1A] border border-[#383838] rounded-xl overflow-hidden mb-5">
@@ -581,14 +612,22 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                     <th className="py-2 px-3">Hạng</th>
                     <th className="py-2 px-3">Người chơi</th>
                     <th className="py-2 px-3 text-right">Bài còn lại</th>
-                    <th className="py-2 px-3 text-right">Số dư</th>
+                    <th className="py-2 px-3 text-right">Số dư {room.isSimulated ? '(Ảo)' : ''}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-800">
                   {round.rankPositions.map((seatIdx, idx) => {
                     const seat = seats[seatIdx];
                     const pos = idx + 1;
-                    const posName = pos === 1 ? '🥇 Nhất' : pos === 2 ? '🥈 Nhì' : pos === 3 ? '🥉 Ba' : '💩 Bét';
+                    const totalRanked = round.rankPositions.length;
+                    const posName =
+                      pos === 1
+                        ? '🥇 Nhất'
+                        : pos === totalRanked
+                        ? '💩 Bét'
+                        : pos === 2
+                        ? '🥈 Nhì'
+                        : '🥉 Ba';
                     return (
                       <tr key={seatIdx} className="text-neutral-300">
                         <td className="py-2.5 px-3 font-bold">{posName}</td>
