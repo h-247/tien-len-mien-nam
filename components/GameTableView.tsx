@@ -54,7 +54,8 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
 
   // Drag selection tracking
   const isDraggingRef = useRef(false);
-  const draggedCardsRef = useRef<Set<string>>(new Set());
+  const dragStartCardRef = useRef<string | null>(null);
+  const didDragRef = useRef(false);
 
   // Audio mute/unmute toggle
   const handleToggleSound = () => {
@@ -170,11 +171,22 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
     }
   }, [turnTimeLeft, round?.status, round?.currentTurnSeat, seats, onAction]);
 
-  // Auto-clear invalid selection on turn changes
+  // Auto-clear selection only when turn actually changes to another player or round is not playing
+  const prevTurnSeatRef = useRef<number | undefined>(round?.currentTurnSeat);
   useEffect(() => {
-    setSelectedCardIds([]);
-    setActionError(null);
-  }, [round?.currentTurnSeat, round?.lastPlayCards, round?.version]);
+    if (round?.status !== 'playing') {
+      setSelectedCardIds([]);
+      setActionError(null);
+      prevTurnSeatRef.current = undefined;
+      return;
+    }
+
+    if (round.currentTurnSeat !== prevTurnSeatRef.current) {
+      prevTurnSeatRef.current = round.currentTurnSeat;
+      setSelectedCardIds([]);
+      setActionError(null);
+    }
+  }, [round?.currentTurnSeat, round?.status]);
 
   // Sort current player's cards
   const sortedMyCards = useMemo(() => {
@@ -241,21 +253,35 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
   // Pointer drag selection handlers
   const handlePointerDown = useCallback((cardId: string) => {
     isDraggingRef.current = true;
-    draggedCardsRef.current = new Set([cardId]);
-    handleToggleCard(cardId);
-  }, [handleToggleCard]);
+    dragStartCardRef.current = cardId;
+    didDragRef.current = false;
+  }, []);
 
   const handlePointerEnter = useCallback((cardId: string) => {
-    if (isDraggingRef.current && !draggedCardsRef.current.has(cardId)) {
-      draggedCardsRef.current.add(cardId);
+    if (isDraggingRef.current) {
+      if (!didDragRef.current && dragStartCardRef.current) {
+        didDragRef.current = true;
+        handleToggleCard(dragStartCardRef.current);
+      }
       handleToggleCard(cardId);
     }
+  }, [handleToggleCard]);
+
+  const handleClickCard = useCallback((cardId: string) => {
+    if (didDragRef.current) {
+      // Completed drag swipe selection, suppress the click event on the end card
+      return;
+    }
+    handleToggleCard(cardId);
   }, [handleToggleCard]);
 
   useEffect(() => {
     const handlePointerUp = () => {
       isDraggingRef.current = false;
-      draggedCardsRef.current.clear();
+      dragStartCardRef.current = null;
+      setTimeout(() => {
+        didDragRef.current = false;
+      }, 50);
     };
     window.addEventListener('pointerup', handlePointerUp);
     window.addEventListener('pointercancel', handlePointerUp);
@@ -800,7 +826,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                     <PlayingCard
                       card={card}
                       selected={isSelected}
-                      onClick={() => handleToggleCard(card.id)}
+                      onClick={() => handleClickCard(card.id)}
                       onDoubleClick={handleDoubleClickCard}
                       onPointerDown={() => handlePointerDown(card.id)}
                       onPointerEnter={() => handlePointerEnter(card.id)}
