@@ -93,7 +93,7 @@ export const rooms = sqliteTable(
     hostUserId: text('host_user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    stake: integer('stake').notNull().default(10000), // Default 10.000 VND
+    stake: integer('stake').notNull().default(1000), // Default 1.000 VND
     status: text('status', {
       enum: ['waiting', 'ready', 'playing', 'finished', 'closed'],
     })

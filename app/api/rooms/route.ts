@@ -12,7 +12,7 @@ const createRoomSchema = z.object({
     .trim()
     .min(2, 'Tên phòng từ 2 đến 40 ký tự.')
     .max(40, 'Tên phòng từ 2 đến 40 ký tự.'),
-  stake: z.number().int().min(1000, 'Mức cược tối thiểu 1.000 ₫.').max(10000000, 'Mức cược tối đa 10.000.000 ₫.'),
+  stake: z.number().int().min(500, 'Mức cược tối thiểu 500 ₫.').max(10000, 'Mức cược tối đa 10.000 ₫.'),
   visibility: z.enum(['public', 'private']).default('public'),
 });
 

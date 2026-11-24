@@ -21,7 +21,7 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('acceptStake') }),
   z.object({
     action: z.literal('updateStake'),
-    stake: z.number().int().min(1000).max(10000000),
+    stake: z.number().int().min(500).max(10000),
   }),
   z.object({
     action: z.literal('configureBot'),
@@ -39,11 +39,11 @@ const actionSchema = z.discriminatedUnion('action', [
   z.object({
     action: z.literal('play'),
     cardIds: z.array(z.string()).min(1).max(13),
-    version: z.number().int(),
+    version: z.number().int().optional(),
   }),
   z.object({
     action: z.literal('pass'),
-    version: z.number().int(),
+    version: z.number().int().optional(),
   }),
 ]);
 
@@ -147,6 +147,7 @@ export async function POST(
     const newState = await getClientRoomState(roomId, user.id);
     return NextResponse.json({ success: true, state: newState });
   } catch (error: any) {
+    console.error('[ROOM ACTION 400 ERROR]', error?.message || error);
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 }

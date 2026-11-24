@@ -24,7 +24,7 @@ interface WaitingRoomViewProps {
   isAdmin?: boolean;
 }
 
-const STAKE_PRESETS = [10000, 20000, 50000, 100000, 200000];
+const STAKE_PRESETS = [1000, 2000, 3000, 5000, 10000];
 
 export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
   state,
@@ -229,7 +229,7 @@ export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
                 {room.stake.toLocaleString('vi-VN')} ₫
               </div>
               <p className="text-[11px] text-neutral-400 mt-0.5">
-                Yêu cầu số dư tối thiểu để vào cược: {(room.stake * 5).toLocaleString('vi-VN')} ₫ (5x mức cược)
+                Yêu cầu số dư tối thiểu để vào cược: {room.stake.toLocaleString('vi-VN')} ₫
               </p>
             </div>
 

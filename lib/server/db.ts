@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS rooms (
 	code text NOT NULL UNIQUE,
 	name text NOT NULL,
 	host_user_id text NOT NULL,
-	stake integer DEFAULT 10000 NOT NULL,
+	stake integer DEFAULT 1000 NOT NULL,
 	status text DEFAULT 'waiting' NOT NULL,
 	visibility text DEFAULT 'public' NOT NULL,
 	current_round_id text,

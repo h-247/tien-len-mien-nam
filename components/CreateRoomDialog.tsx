@@ -9,7 +9,7 @@ interface CreateRoomDialogProps {
   onCreated: (roomId: string) => void;
 }
 
-const STAKE_PRESETS = [10000, 20000, 50000, 100000, 200000];
+const STAKE_PRESETS = [1000, 2000, 3000, 5000, 10000];
 
 export const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
   isOpen,
@@ -17,7 +17,7 @@ export const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
   onCreated,
 }) => {
   const [name, setName] = useState('');
-  const [stake, setStake] = useState(10000);
+  const [stake, setStake] = useState(1000);
   const [visibility, setVisibility] = useState<'public' | 'private'>('public');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,11 +111,11 @@ export const CreateRoomDialog: React.FC<CreateRoomDialogProps> = ({
 
             <input
               type="number"
-              min={1000}
-              max={10000000}
-              step={1000}
+              min={500}
+              max={10000}
+              step={500}
               value={stake}
-              onChange={(e) => setStake(Math.max(1000, Number(e.target.value)))}
+              onChange={(e) => setStake(Math.min(10000, Math.max(500, Number(e.target.value))))}
               className="w-full bg-[#1A1A1A] border border-[#383838] rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-white transition-colors font-mono"
             />
           </div>

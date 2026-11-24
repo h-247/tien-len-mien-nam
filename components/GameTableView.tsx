@@ -174,7 +174,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
   useEffect(() => {
     setSelectedCardIds([]);
     setActionError(null);
-  }, [round?.currentTurnSeat, round?.lastPlayCards]);
+  }, [round?.currentTurnSeat, round?.lastPlayCards, round?.version]);
 
   // Sort current player's cards
   const sortedMyCards = useMemo(() => {
@@ -268,6 +268,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
   // Play move handler with audio
   const handlePlay = useCallback(async () => {
     if (!round || !isMyTurn || !selectionValidation.valid) return;
+    if (selectedCardIds.length === 0) return;
 
     try {
       setLoading(true);
@@ -288,14 +289,14 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
 
   // Double-click card to play immediately
   const handleDoubleClickCard = useCallback(() => {
-    if (isMyTurn && selectionValidation.valid) {
+    if (isMyTurn && selectionValidation.valid && !loading) {
       handlePlay();
     }
-  }, [isMyTurn, selectionValidation.valid, handlePlay]);
+  }, [isMyTurn, selectionValidation.valid, loading, handlePlay]);
 
   // Pass turn handler with audio
   const handlePass = useCallback(async () => {
-    if (!round || !isMyTurn || !round.lastPlayCards) return;
+    if (!round || !isMyTurn || !round.lastPlayCards || round.lastPlayCards.length === 0) return;
 
     try {
       setLoading(true);

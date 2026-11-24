@@ -87,7 +87,7 @@ export async function createRoom(params: {
   const now = Date.now();
   const roomId = `room_${now}_${Math.random().toString(36).substring(2, 7)}`;
   const code = generateRoomCode();
-  const stake = params.stake !== undefined ? params.stake : 10000;
+  const stake = params.stake !== undefined ? Math.min(10000, Math.max(500, params.stake)) : 1000;
   const visibility = params.visibility || 'public';
 
   await db.insert(rooms).values({
@@ -306,9 +306,10 @@ export async function updateRoomStake(params: {
   }
 
   // Update room stake
+  const stake = Math.min(10000, Math.max(500, params.stake));
   await db
     .update(rooms)
-    .set({ stake: params.stake, updatedAt: Date.now() })
+    .set({ stake, updatedAt: Date.now() })
     .where(eq(rooms.id, room.id));
 
   // Invalidate previous acceptances for all non-host human seats
@@ -339,11 +340,11 @@ export async function acceptStake(params: { roomId: string; userId: string }) {
     return;
   }
 
-  // Check balance >= 5x stake
+  // Check balance >= stake
   const wallet = await db.query.wallets.findFirst({
     where: eq(wallets.userId, params.userId),
   });
-  const requiredBalance = room.stake * 5;
+  const requiredBalance = room.stake;
   if (!wallet || wallet.balance < requiredBalance) {
     throw new Error(
       `Số dư của bạn (${(wallet?.balance || 0).toLocaleString('vi-VN')} ₫) không đủ mức tối thiểu để chấp nhận mức cược này (Yêu cầu ít nhất: ${requiredBalance.toLocaleString('vi-VN')} ₫).`
@@ -466,7 +467,16 @@ export async function startRoomMatch(params: {
     throw new Error('Chỉ chủ phòng mới có quyền bắt đầu ván đấu.');
   }
   if (room.status === 'playing') {
-    throw new Error('Ván đấu đang diễn ra.');
+    if (room.currentRoundId) {
+      const currentRound = await db.query.gameRounds.findFirst({
+        where: eq(gameRounds.id, room.currentRoundId),
+      });
+      if (!currentRound || currentRound.status !== 'finished') {
+        throw new Error('Ván đấu đang diễn ra.');
+      }
+    } else {
+      throw new Error('Ván đấu đang diễn ra.');
+    }
   }
 
   const seats = await db.query.roomSeats.findMany({
@@ -495,7 +505,7 @@ export async function startRoomMatch(params: {
         const wallet = await db.query.wallets.findFirst({
           where: eq(wallets.userId, s.userId),
         });
-        const required = room.stake * 5;
+        const required = room.stake;
         if (!wallet || wallet.balance < required) {
           throw new Error(`Người chơi tại vị trí ${s.seatIndex + 1} không đủ số dư tối thiểu (${required.toLocaleString('vi-VN')} ₫).`);
         }
@@ -539,7 +549,7 @@ export async function startRoomMatch(params: {
     where: eq(gameRounds.roomId, room.id),
   });
   const roundNumber = pastRounds.length + 1;
-  const roundId = `round_${room.id}_${roundNumber}`;
+  const roundId = `round_${room.id}_${roundNumber}_${Date.now()}`;
 
   // Initialize round state
   const roundState = initializeRound(
@@ -609,7 +619,7 @@ export async function submitPlayAction(params: {
   roomId: string;
   userId: string;
   cardIds: string[];
-  version: number;
+  version?: number;
 }) {
   const db = await getAppDb();
   const room = await db.query.rooms.findFirst({
@@ -620,10 +630,6 @@ export async function submitPlayAction(params: {
   }
 
   const { roundState, seatInfos } = await loadRoundState(room.currentRoundId);
-
-  if (roundState.version !== params.version) {
-    throw new Error('Trạng thái bàn chơi đã thay đổi. Vui lòng thử lại.');
-  }
 
   const mySeat = seatInfos.find((s) => s.userId === params.userId);
   if (!mySeat) {
@@ -646,7 +652,7 @@ export async function submitPlayAction(params: {
 export async function submitPassAction(params: {
   roomId: string;
   userId: string;
-  version: number;
+  version?: number;
 }) {
   const db = await getAppDb();
   const room = await db.query.rooms.findFirst({
@@ -657,10 +663,6 @@ export async function submitPassAction(params: {
   }
 
   const { roundState, seatInfos } = await loadRoundState(room.currentRoundId);
-
-  if (roundState.version !== params.version) {
-    throw new Error('Trạng thái bàn chơi đã thay đổi. Vui lòng thử lại.');
-  }
 
   const mySeat = seatInfos.find((s) => s.userId === params.userId);
   if (!mySeat) {

@@ -303,10 +303,12 @@ export function executePlay(
   state.mustIncludeCardId = null;
 
   // Log play
-  const playerDisplayName = seats[seatIndex].displayName;
+  const playerDisplayName =
+    seats.find((s) => s.seatIndex === seatIndex)?.displayName || `Ghế ${seatIndex + 1}`;
   const cardsNameStr = playedCards.map((c) => c.name).join(', ');
   if (isChop && choppedSeat !== null) {
-    const choppedName = seats[choppedSeat].displayName;
+    const choppedName =
+      seats.find((s) => s.seatIndex === choppedSeat)?.displayName || `Ghế ${choppedSeat + 1}`;
     state.roundLogs.push(
       `💥 ${playerDisplayName} CHẶT ${choppedName} bằng [${cardsNameStr}] (+${chopBounty.toLocaleString('vi-VN')} ₫)!`
     );
