@@ -10,7 +10,8 @@ import {
   PlayerHandState,
 } from '../tienlen/engine';
 import { chooseBotMove } from '../tienlen/ai';
-import { getCards } from '../tienlen/cards';
+import { getCards, compareCards } from '../tienlen/cards';
+import { Card } from '../tienlen/types';
 import { identifyCombination } from '../tienlen/combinations';
 import { calculateSettlement, SeatRoundData } from '../tienlen/penalties';
 import { recordRoundSettlement } from './ledger';
@@ -53,6 +54,7 @@ export interface ClientRoomState {
     status: 'playing' | 'finished';
     currentTurnSeat: number;
     firstPlayerSeat: number;
+    mustIncludeCardId?: string | null;
     lastPlaySeat: number | null;
     lastPlayCards: string[] | null;
     lastPlayType: string | null;
@@ -695,12 +697,16 @@ export async function executeSingleBotStep(params: { roomId: string }) {
     return roundState;
   }
 
-  const currentSeat = seatInfos[roundState.currentTurnSeat];
+  const currentSeat = seatInfos.find((s) => s.seatIndex === roundState.currentTurnSeat);
   if (!currentSeat || !currentSeat.isBot) {
     return roundState;
   }
 
-  const botHandCards = getCards(roundState.hands[roundState.currentTurnSeat].cards);
+  const botHand = roundState.hands.find((h) => h.seatIndex === roundState.currentTurnSeat);
+  if (!botHand) {
+    return roundState;
+  }
+  const botHandCards = getCards(botHand.cards);
   const currentTrick =
     roundState.lastPlayCards && roundState.lastPlayCards.length > 0
       ? identifyCombination(getCards(roundState.lastPlayCards))
@@ -731,12 +737,23 @@ export async function executeSingleBotStep(params: { roomId: string }) {
       if (currentTrick) {
         executePass(roundState, roundState.currentTurnSeat, seatInfos);
       } else {
-        const fallbackCardId = roundState.mustIncludeCardId || roundState.hands[roundState.currentTurnSeat].cards[0];
+        const fallbackCardId =
+          roundState.mustIncludeCardId && botHand.cards.includes(roundState.mustIncludeCardId)
+            ? roundState.mustIncludeCardId
+            : botHand.cards[0];
         executePlay(roundState, roundState.currentTurnSeat, [fallbackCardId], seatInfos);
       }
     }
   } else {
-    executePass(roundState, roundState.currentTurnSeat, seatInfos);
+    if (currentTrick) {
+      executePass(roundState, roundState.currentTurnSeat, seatInfos);
+    } else {
+      const fallbackCardId =
+        roundState.mustIncludeCardId && botHand.cards.includes(roundState.mustIncludeCardId)
+          ? roundState.mustIncludeCardId
+          : botHand.cards[0];
+      executePlay(roundState, roundState.currentTurnSeat, [fallbackCardId], seatInfos);
+    }
   }
 
   if ((roundState.status as string) === 'finished') {
@@ -854,7 +871,18 @@ async function loadRoundState(roundId: string): Promise<{ roundState: RoundState
     firstPlayerSeat: round.firstPlayerSeat,
     mustIncludeCardId:
       round.roundNumber === 1 && !round.lastPlayCards && playerHands.every((h) => h.cards.length === 13)
-        ? '3_spades'
+        ? playerHands.some((h) => h.cards.includes('3_spades'))
+          ? '3_spades'
+          : (() => {
+              let lowest: Card | null = null;
+              for (const h of playerHands) {
+                const cards = getCards(h.cards);
+                for (const c of cards) {
+                  if (!lowest || compareCards(c, lowest) < 0) lowest = c;
+                }
+              }
+              return lowest?.id || null;
+            })()
         : null,
     lastPlaySeat: round.lastPlaySeat,
     lastPlayCards: round.lastPlayCards ? JSON.parse(round.lastPlayCards) : null,
@@ -929,6 +957,26 @@ export async function getClientRoomState(roomId: string, currentUserId: string):
       where: eq(gameRounds.id, room.currentRoundId),
     });
     if (round) {
+      const hands = await db.query.gameHands.findMany({
+        where: eq(gameHands.roundId, round.id),
+      });
+
+      let mustIncludeCardId: string | null = null;
+      if (round.roundNumber === 1 && !round.lastPlayCards) {
+        if (hands.some((h) => JSON.parse(h.cards).includes('3_spades'))) {
+          mustIncludeCardId = '3_spades';
+        } else {
+          let lowest: Card | null = null;
+          for (const h of hands) {
+            const cards = getCards(JSON.parse(h.cards));
+            for (const c of cards) {
+              if (!lowest || compareCards(c, lowest) < 0) lowest = c;
+            }
+          }
+          mustIncludeCardId = lowest?.id || null;
+        }
+      }
+
       roundData = {
         id: round.id,
         roundNumber: round.roundNumber,
@@ -936,6 +984,7 @@ export async function getClientRoomState(roomId: string, currentUserId: string):
         status: round.status as 'playing' | 'finished',
         currentTurnSeat: round.currentTurnSeat,
         firstPlayerSeat: round.firstPlayerSeat,
+        mustIncludeCardId,
         lastPlaySeat: round.lastPlaySeat,
         lastPlayCards: round.lastPlayCards ? JSON.parse(round.lastPlayCards) : null,
         lastPlayType: round.lastPlayType,
@@ -946,10 +995,6 @@ export async function getClientRoomState(roomId: string, currentUserId: string):
         roundLogs: JSON.parse(round.roundLogs || '[]'),
         version: round.version,
       };
-
-      const hands = await db.query.gameHands.findMany({
-        where: eq(gameHands.roundId, round.id),
-      });
 
       for (let i = 0; i < 4; i++) {
         const s = dbSeats.find((seat) => seat.seatIndex === i);

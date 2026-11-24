@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { ClientRoomState, PublicSeatState } from '@/lib/server/game-service';
 import { PlayingCard } from './PlayingCard';
 import { sortCardsByRank, sortCardsBySuit, getCard, getCards } from '@/lib/tienlen/cards';
 import { identifyCombination, compareCombinations, getComboNameVi } from '@/lib/tienlen/combinations';
 import { generateLegalMoves } from '@/lib/tienlen/ai';
+import { sound } from '@/lib/client/sound';
 import {
   Coins,
   ArrowRight,
@@ -17,8 +18,11 @@ import {
   Trophy,
   Check,
   AlertTriangle,
+  AlertCircle,
   Play,
   Share2,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 interface GameTableViewProps {
@@ -41,14 +45,27 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showRoomInfo, setShowRoomInfo] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(sound.isEnabled());
+  const [hintIndex, setHintIndex] = useState(0);
 
   const TURN_DURATION = 15;
   const [turnTimeLeft, setTurnTimeLeft] = useState<number>(TURN_DURATION);
   const botStepPendingRef = useRef(false);
 
+  // Drag selection tracking
+  const isDraggingRef = useRef(false);
+  const draggedCardsRef = useRef<Set<string>>(new Set());
+
+  // Audio mute/unmute toggle
+  const handleToggleSound = () => {
+    const next = sound.toggle();
+    setSoundEnabled(next);
+  };
+
   // Reset turn timer on turn or version changes
   useEffect(() => {
     setTurnTimeLeft(TURN_DURATION);
+    setHintIndex(0);
   }, [round?.currentTurnSeat, round?.version]);
 
   // Turn countdown timer interval
@@ -61,6 +78,54 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
 
     return () => clearInterval(interval);
   }, [round?.status, round?.currentTurnSeat, round?.version]);
+
+  // Watchdog audio triggers for other players' / bots' plays and passes
+  const prevLastPlayCardsRef = useRef<string[] | null>(round?.lastPlayCards || null);
+  const prevPassesCountRef = useRef<number>(round?.trickPasses?.length || 0);
+  const prevVersionRef = useRef<number>(round?.version || 0);
+
+  useEffect(() => {
+    if (!round) return;
+
+    // Check if new cards were played
+    if (round.lastPlayCards && round.lastPlayCards.length > 0) {
+      const isNewPlay =
+        round.version !== prevVersionRef.current &&
+        JSON.stringify(round.lastPlayCards) !== JSON.stringify(prevLastPlayCardsRef.current);
+      if (isNewPlay && round.lastPlaySeat !== mySeatIndex) {
+        sound.playCardPlay(round.lastPlayType === 'chop');
+      }
+    }
+
+    // Check if another player passed
+    if (round.trickPasses && round.trickPasses.length > prevPassesCountRef.current) {
+      if (round.currentTurnSeat !== mySeatIndex) {
+        sound.playPass();
+      }
+    }
+
+    prevLastPlayCardsRef.current = round.lastPlayCards;
+    prevPassesCountRef.current = round.trickPasses?.length || 0;
+    prevVersionRef.current = round.version;
+  }, [round?.lastPlayCards, round?.trickPasses, round?.version, round?.lastPlaySeat, round?.lastPlayType, mySeatIndex]);
+
+  // Turn change alert sound for local user
+  const prevIsMyTurnRef = useRef(isMyTurn);
+  useEffect(() => {
+    if (isMyTurn && !prevIsMyTurnRef.current && round?.status === 'playing') {
+      sound.playMyTurnChime();
+    }
+    prevIsMyTurnRef.current = isMyTurn;
+  }, [isMyTurn, round?.status]);
+
+  // Win fanfare sound
+  const prevStatusRef = useRef(round?.status);
+  useEffect(() => {
+    if (round?.status === 'finished' && prevStatusRef.current !== 'finished') {
+      sound.playWin();
+    }
+    prevStatusRef.current = round?.status;
+  }, [round?.status]);
 
   // Auto-advance bot turns sequentially with visible thinking time
   useEffect(() => {
@@ -75,7 +140,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
       return;
     }
 
-    // Delay 1.5s so user sees the timer decrease (15s -> 14s -> 13s) before the bot plays
+    // Delay 1.2s so user sees the bot thinking and the timer tick
     const botTimer = setTimeout(async () => {
       if (botStepPendingRef.current) return;
       botStepPendingRef.current = true;
@@ -86,10 +151,24 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
       } finally {
         botStepPendingRef.current = false;
       }
-    }, 1500);
+    }, 1200);
 
     return () => clearTimeout(botTimer);
   }, [round?.currentTurnSeat, round?.version, round?.status, seats, onAction]);
+
+  // Fallback watchdog: if bot turn is active and timer hits 0, force trigger botStep
+  useEffect(() => {
+    if (round?.status !== 'playing') return;
+    const currentSeat = seats[round.currentTurnSeat];
+    if (currentSeat?.isBot && turnTimeLeft === 0 && !botStepPendingRef.current) {
+      botStepPendingRef.current = true;
+      onAction({ action: 'botStep' })
+        .catch(console.error)
+        .finally(() => {
+          botStepPendingRef.current = false;
+        });
+    }
+  }, [turnTimeLeft, round?.status, round?.currentTurnSeat, seats, onAction]);
 
   // Auto-clear invalid selection on turn changes
   useEffect(() => {
@@ -109,6 +188,14 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
     return identifyCombination(getCards(round.lastPlayCards));
   }, [round?.lastPlayCards]);
 
+  // Check if player has no legal moves against the current trick
+  const hasNoLegalMoves = useMemo(() => {
+    if (!isMyTurn || !round || !currentTrickCombo) return false;
+    const myHandCards = getCards(myCards);
+    const moves = generateLegalMoves(myHandCards, currentTrickCombo);
+    return moves.length === 0;
+  }, [isMyTurn, round, currentTrickCombo, myCards]);
+
   // Check if selected cards are a valid legal play
   const selectionValidation = useMemo(() => {
     if (selectedCardIds.length === 0) return { valid: false };
@@ -119,15 +206,14 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
       return { valid: false, error: 'Tổ hợp bài không hợp lệ.' };
     }
 
-    // Check first trick 3 of spades constraint
-    if (
-      round?.roundNumber === 1 &&
-      !round.lastPlayCards &&
-      round.firstPlayerSeat === mySeatIndex &&
-      myCards.includes('3_spades')
-    ) {
-      if (!selectedCardIds.includes('3_spades')) {
-        return { valid: false, error: 'Nước đi đầu tiên phải có 3 Bích.' };
+    // Check first trick constraint (must include required card e.g. 3 of spades or lowest card)
+    if (round?.mustIncludeCardId) {
+      if (!selectedCardIds.includes(round.mustIncludeCardId)) {
+        const requiredCard = getCard(round.mustIncludeCardId);
+        return {
+          valid: false,
+          error: `Nước đi đầu tiên phải có ${requiredCard?.name || round.mustIncludeCardId}.`,
+        };
       }
     }
 
@@ -143,21 +229,50 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
     return { valid: true, combo, isChop: cmp.isChop };
   }, [selectedCardIds, currentTrickCombo, round, mySeatIndex]);
 
-  // Card click handler
-  const handleToggleCard = (cardId: string) => {
+  // Card click handler with sound
+  const handleToggleCard = useCallback((cardId: string) => {
     setActionError(null);
+    sound.playCardSelect();
     setSelectedCardIds((prev) =>
       prev.includes(cardId) ? prev.filter((id) => id !== cardId) : [...prev, cardId]
     );
-  };
+  }, []);
 
-  // Play move handler
-  const handlePlay = async () => {
+  // Pointer drag selection handlers
+  const handlePointerDown = useCallback((cardId: string) => {
+    isDraggingRef.current = true;
+    draggedCardsRef.current = new Set([cardId]);
+    handleToggleCard(cardId);
+  }, [handleToggleCard]);
+
+  const handlePointerEnter = useCallback((cardId: string) => {
+    if (isDraggingRef.current && !draggedCardsRef.current.has(cardId)) {
+      draggedCardsRef.current.add(cardId);
+      handleToggleCard(cardId);
+    }
+  }, [handleToggleCard]);
+
+  useEffect(() => {
+    const handlePointerUp = () => {
+      isDraggingRef.current = false;
+      draggedCardsRef.current.clear();
+    };
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, []);
+
+  // Play move handler with audio
+  const handlePlay = useCallback(async () => {
     if (!round || !isMyTurn || !selectionValidation.valid) return;
 
     try {
       setLoading(true);
       setActionError(null);
+      sound.playCardPlay(selectionValidation.isChop);
       await onAction({
         action: 'play',
         cardIds: selectedCardIds,
@@ -169,15 +284,23 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [round, isMyTurn, selectionValidation, onAction, selectedCardIds]);
 
-  // Pass turn handler
-  const handlePass = async () => {
+  // Double-click card to play immediately
+  const handleDoubleClickCard = useCallback(() => {
+    if (isMyTurn && selectionValidation.valid) {
+      handlePlay();
+    }
+  }, [isMyTurn, selectionValidation.valid, handlePlay]);
+
+  // Pass turn handler with audio
+  const handlePass = useCallback(async () => {
     if (!round || !isMyTurn || !round.lastPlayCards) return;
 
     try {
       setLoading(true);
       setActionError(null);
+      sound.playPass();
       await onAction({
         action: 'pass',
         version: round.version,
@@ -188,17 +311,14 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [round, isMyTurn, onAction]);
 
-  // Auto Hint: finds the lowest valid combo to beat the trick
-  const handleHint = () => {
+  // Auto Hint: cycles through valid legal moves to beat the trick
+  const handleHint = useCallback(() => {
     if (!isMyTurn || !round) return;
 
     const myHandCards = getCards(myCards);
-    const mustInclude =
-      round.roundNumber === 1 && !round.lastPlayCards && round.firstPlayerSeat === mySeatIndex
-        ? '3_spades'
-        : undefined;
+    const mustInclude = round.mustIncludeCardId || undefined;
 
     const legalMoves = generateLegalMoves(myHandCards, currentTrickCombo, mustInclude);
     if (legalMoves.length === 0) {
@@ -206,36 +326,66 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
       return;
     }
 
-    // Pick the move with the lowest highestCard
+    // Sort moves by lowest highestCard
     const sortedMoves = [...legalMoves].sort((a, b) => {
       const comboA = identifyCombination(a)!;
       const comboB = identifyCombination(b)!;
       return comboA.highestCard.rankValue - comboB.highestCard.rankValue;
     });
 
-    const bestMove = sortedMoves[0];
-    setSelectedCardIds(bestMove.map((c) => c.id));
+    const chosenMove = sortedMoves[hintIndex % sortedMoves.length];
+    setSelectedCardIds(chosenMove.map((c) => c.id));
+    setHintIndex((prev) => prev + 1);
+    sound.playCardSelect();
     setActionError(null);
-  };
+  }, [isMyTurn, round, myCards, currentTrickCombo, hintIndex]);
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.code === 'Space' || e.key === 'Enter') {
+        if (isMyTurn && selectionValidation.valid && !loading) {
+          e.preventDefault();
+          handlePlay();
+        }
+      } else if (e.key === 'p' || e.key === 'P' || e.key === 'b' || e.key === 'B') {
+        if (isMyTurn && round?.lastPlayCards && !loading) {
+          e.preventDefault();
+          handlePass();
+        }
+      } else if (e.key === 'g' || e.key === 'G' || e.key === 'h' || e.key === 'H') {
+        if (isMyTurn && !loading) {
+          e.preventDefault();
+          handleHint();
+        }
+      } else if (e.key === 's' || e.key === 'S' || e.key === 'x' || e.key === 'X') {
+        e.preventDefault();
+        setSortBy((prev) => (prev === 'rank' ? 'suit' : 'rank'));
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setSelectedCardIds([]);
+        setActionError(null);
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        handleToggleSound();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMyTurn, selectionValidation.valid, loading, round?.lastPlayCards, handlePlay, handlePass, handleHint]);
 
   // Auto-move on timeout for current player
   useEffect(() => {
     if (round?.status !== 'playing' || !isMyTurn || turnTimeLeft > 0 || loading) return;
 
     if (round.lastPlayCards && round.lastPlayCards.length > 0) {
-      // Auto-pass if possible
       handlePass();
     } else {
-      // Must lead: play lowest legal move
       const myHandCards = getCards(myCards);
-      const mustInclude =
-        round.roundNumber === 1 &&
-        !round.lastPlayCards &&
-        round.firstPlayerSeat === mySeatIndex &&
-        myCards.includes('3_spades')
-          ? '3_spades'
-          : undefined;
-
+      const mustInclude = round.mustIncludeCardId || undefined;
       const legalMoves = generateLegalMoves(myHandCards, null, mustInclude);
       if (legalMoves.length > 0) {
         const sortedMoves = [...legalMoves].sort((a, b) => {
@@ -251,7 +401,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
         }).catch(console.error);
       }
     }
-  }, [turnTimeLeft, isMyTurn, round, loading, myCards, mySeatIndex, onAction]);
+  }, [turnTimeLeft, isMyTurn, round, loading, myCards, mySeatIndex, onAction, handlePass]);
 
   // Relative seat mapping for 2, 3, or 4-player table:
   const myIndex = mySeatIndex !== null ? mySeatIndex : 0;
@@ -388,7 +538,19 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <button
+            onClick={handleToggleSound}
+            className="p-1 text-neutral-400 hover:text-white rounded transition-colors"
+            title={soundEnabled ? 'Tắt âm thanh (Phím M)' : 'Bật âm thanh (Phím M)'}
+            aria-label={soundEnabled ? 'Tắt âm thanh' : 'Bật âm thanh'}
+          >
+            {soundEnabled ? (
+              <Volume2 className="w-4 h-4 text-emerald-400" />
+            ) : (
+              <VolumeX className="w-4 h-4 text-neutral-500" />
+            )}
+          </button>
           <button
             onClick={() => setShowRoomInfo(!showRoomInfo)}
             className="p-1 text-neutral-400 hover:text-white rounded"
@@ -435,11 +597,15 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-800 text-neutral-200 font-medium text-xs border border-neutral-700 shadow-sm">
+                    {seats[round.currentTurnSeat]?.isBot && (
+                      <Bot className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                    )}
                     <span>
                       Lượt của:{' '}
                       <b className="text-white">
                         {seats[round.currentTurnSeat]?.displayName || 'Người chơi'}
                       </b>
+                      {seats[round.currentTurnSeat]?.isBot ? ' (Đang nghĩ)' : ''}
                     </span>
                     <span
                       className={`font-mono px-2 py-0.5 rounded-full text-xs font-bold ${
@@ -470,7 +636,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
               {round?.lastPlayCards && round.lastPlayCards.length > 0 ? (
                 <div>
                   <div className="flex items-center justify-center -space-x-4 sm:-space-x-6 mb-1.5">
-                    {round.lastPlayCards.map((cardId, idx) => (
+                    {round.lastPlayCards.map((cardId) => (
                       <PlayingCard
                         key={cardId}
                         cardId={cardId}
@@ -510,6 +676,52 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
 
         {/* Bottom Area: Current Player's Hand & Controls */}
         <div className="z-20 flex flex-col items-center w-full pt-2">
+          {/* Real-time Combination & Move Validation Status */}
+          {selectedCardIds.length > 0 && (
+            <div className="mb-2 max-w-md w-full px-1">
+              <div
+                className={`py-1 px-3 rounded-xl border text-xs font-semibold flex items-center justify-between shadow-sm transition-all ${
+                  selectionValidation.valid
+                    ? 'bg-emerald-950/80 border-emerald-500/70 text-emerald-300'
+                    : 'bg-amber-950/80 border-amber-500/70 text-amber-300'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 truncate">
+                  {selectionValidation.valid ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  )}
+                  <span className="font-bold">
+                    {selectionValidation.combo ? getComboNameVi(selectionValidation.combo.type) : 'Tổ hợp'}
+                  </span>
+                  <span className="text-[11px] opacity-90 truncate">
+                    {selectionValidation.valid
+                      ? selectionValidation.isChop
+                        ? '• CHẶT HÀNG!'
+                        : '• Đè được bài!'
+                      : `• ${selectionValidation.error || 'Không hợp lệ'}`}
+                  </span>
+                </div>
+                {selectionValidation.valid && (
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono hidden sm:inline">
+                    Phím Cách để đánh
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Notice when player has no legal moves to beat the trick */}
+          {hasNoLegalMoves && selectedCardIds.length === 0 && (
+            <div className="mb-2 max-w-md w-full px-1">
+              <div className="py-1 px-3 rounded-xl border bg-amber-950/70 border-amber-600/70 text-amber-300 text-xs font-semibold flex items-center gap-1.5 shadow-sm animate-pulse">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Bạn không có bài đè được trên bàn. Bấm &quot;Bỏ lượt&quot; để nhường.</span>
+              </div>
+            </div>
+          )}
+
           {/* Current Turn Time Remaining Badge for Player */}
           {isMyTurn && (
             <div className="flex items-center justify-between w-full max-w-md px-1 mb-1">
@@ -533,11 +745,15 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
             <button
               onClick={handlePlay}
               disabled={!isMyTurn || !selectionValidation.valid || loading}
-              className="flex-1 py-2 sm:py-2.5 px-3 rounded-xl bg-white hover:bg-neutral-200 text-black font-extrabold text-xs sm:text-sm shadow-md transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+              className={`flex-1 py-2 sm:py-2.5 px-3 rounded-xl font-extrabold text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-1 disabled:opacity-30 disabled:cursor-not-allowed ${
+                selectionValidation.valid && isMyTurn
+                  ? 'bg-emerald-400 hover:bg-emerald-300 text-black ring-2 ring-emerald-300 shadow-emerald-500/20'
+                  : 'bg-white hover:bg-neutral-200 text-black'
+              }`}
             >
               <span>Đánh bài</span>
               {selectionValidation.combo && (
-                <span className="text-[10px] font-bold text-neutral-600 hidden sm:inline">
+                <span className="text-[10px] font-bold opacity-75 hidden sm:inline">
                   ({getComboNameVi(selectionValidation.combo.type)})
                 </span>
               )}
@@ -546,7 +762,11 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
             <button
               onClick={handlePass}
               disabled={!isMyTurn || !round?.lastPlayCards || loading}
-              className="py-2 sm:py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs sm:text-sm border border-neutral-700 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              className={`py-2 sm:py-2.5 px-3 rounded-xl font-bold text-xs sm:text-sm border transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
+                hasNoLegalMoves && isMyTurn
+                  ? 'bg-amber-900/50 hover:bg-amber-800/60 text-amber-200 border-amber-500 ring-2 ring-amber-400/40'
+                  : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border-neutral-700'
+              }`}
             >
               Bỏ lượt
             </button>
@@ -555,7 +775,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
               onClick={handleHint}
               disabled={!isMyTurn || loading}
               className="py-2 sm:py-2.5 px-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-yellow-400 font-semibold text-xs border border-neutral-700 transition-all disabled:opacity-30"
-              title="Gợi ý nước đi"
+              title="Gợi ý nước đi (Phím G)"
             >
               Gợi ý
             </button>
@@ -563,7 +783,7 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
             <button
               onClick={() => setSortBy(sortBy === 'rank' ? 'suit' : 'rank')}
               className="py-2 sm:py-2.5 px-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold text-xs border border-neutral-700 transition-all"
-              title="Sắp xếp bài"
+              title="Sắp xếp bài (Phím S)"
             >
               Xếp {sortBy === 'rank' ? 'Số' : 'Chất'}
             </button>
@@ -580,6 +800,9 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                       card={card}
                       selected={isSelected}
                       onClick={() => handleToggleCard(card.id)}
+                      onDoubleClick={handleDoubleClickCard}
+                      onPointerDown={() => handlePointerDown(card.id)}
+                      onPointerEnter={() => handlePointerEnter(card.id)}
                       size="md"
                     />
                   </div>

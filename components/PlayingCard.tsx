@@ -33,6 +33,9 @@ interface PlayingCardProps {
   faceDown?: boolean;
   selected?: boolean;
   onClick?: () => void;
+  onDoubleClick?: () => void;
+  onPointerDown?: (e: React.PointerEvent) => void;
+  onPointerEnter?: (e: React.PointerEvent) => void;
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   dimmed?: boolean;
@@ -44,6 +47,9 @@ export const PlayingCard: React.FC<PlayingCardProps> = ({
   faceDown = false,
   selected = false,
   onClick,
+  onDoubleClick,
+  onPointerDown,
+  onPointerEnter,
   size = 'md',
   className = '',
   dimmed = false,
@@ -75,6 +81,9 @@ export const PlayingCard: React.FC<PlayingCardProps> = ({
   return (
     <div
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      onPointerDown={onPointerDown}
+      onPointerEnter={onPointerEnter}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       onKeyDown={(e) => {
@@ -83,11 +92,11 @@ export const PlayingCard: React.FC<PlayingCardProps> = ({
           onClick();
         }
       }}
-      className={`relative select-none font-sans font-bold shadow-md transition-all duration-200 flex flex-col justify-between p-1 sm:p-1.5 border ${sizeClasses} ${
+      className={`relative select-none font-sans font-bold shadow-md transition-all duration-150 flex flex-col justify-between p-1 sm:p-1.5 border ${sizeClasses} ${
         selected
-          ? '-translate-y-5 shadow-lg border-yellow-400 ring-2 ring-yellow-400 bg-amber-50'
-          : 'bg-white border-neutral-300 hover:-translate-y-1'
-      } ${onClick ? 'cursor-pointer' : ''} ${
+          ? '-translate-y-5 shadow-xl border-amber-400 ring-2 ring-amber-400/90 bg-amber-50'
+          : 'bg-white border-neutral-300 hover:-translate-y-1 hover:shadow-lg'
+      } ${onClick ? 'cursor-pointer active:scale-95' : ''} ${
         dimmed ? 'opacity-40 grayscale' : ''
       } ${className}`}
     >

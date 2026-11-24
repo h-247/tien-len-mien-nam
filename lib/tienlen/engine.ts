@@ -233,7 +233,7 @@ export function executePlay(
     return { success: false, error: 'Chưa tới lượt của bạn.' };
   }
 
-  const hand = state.hands[seatIndex];
+  const hand = state.hands.find((h) => h.seatIndex === seatIndex);
   if (!hand || hand.finishedPosition !== null) {
     return { success: false, error: 'Người chơi đã hết bài.' };
   }
@@ -245,9 +245,16 @@ export function executePlay(
     }
   }
 
-  // Validate 3 of spades rule on first play
+  // Validate first play must include required card (3 of spades or lowest card dealt)
   if (state.mustIncludeCardId && !cardIds.includes(state.mustIncludeCardId)) {
-    return { success: false, error: 'Nước đi đầu tiên phải chứa 3 Bích.' };
+    const cardName =
+      state.mustIncludeCardId === '3_spades'
+        ? '3 Bích'
+        : getCard(state.mustIncludeCardId)?.name || state.mustIncludeCardId;
+    return {
+      success: false,
+      error: `Nước đi đầu tiên phải chứa ${cardName}.`,
+    };
   }
 
   const playedCards = getCards(cardIds);
@@ -284,7 +291,10 @@ export function executePlay(
       }
 
       hand.chopBonusAmount += chopBounty;
-      state.hands[choppedSeat].chopPenaltyAmount += chopBounty;
+      const choppedHand = state.hands.find((h) => h.seatIndex === choppedSeat);
+      if (choppedHand) {
+        choppedHand.chopPenaltyAmount += chopBounty;
+      }
     }
   }
 
