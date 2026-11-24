@@ -85,7 +85,7 @@ export async function createRoom(params: {
   const now = Date.now();
   const roomId = `room_${now}_${Math.random().toString(36).substring(2, 7)}`;
   const code = generateRoomCode();
-  const stake = params.stake || 10000;
+  const stake = params.stake !== undefined ? params.stake : 10000;
   const visibility = params.visibility || 'public';
 
   await db.insert(rooms).values({
@@ -126,8 +126,8 @@ export async function createQuickBotRoom(params: {
   const botCount = params.botCount && params.botCount >= 1 && params.botCount <= 3 ? params.botCount : 3;
   const { roomId } = await createRoom({
     hostUserId: params.hostUserId,
-    name: `Đấu luyện cùng ${botCount} Bot AI (Mô phỏng)`,
-    stake: params.stake || 10000,
+    name: `Đấu luyện cùng ${botCount} Bot AI`,
+    stake: 0,
     visibility: 'private',
   });
 
@@ -295,6 +295,14 @@ export async function updateRoomStake(params: {
     throw new Error('Không thể thay đổi mức cược khi đang chơi.');
   }
 
+  const seats = await db.query.roomSeats.findMany({
+    where: eq(roomSeats.roomId, room.id),
+  });
+  const isBotRoom = seats.filter((s) => !s.isBot).length <= 1 && seats.some((s) => s.isBot);
+  if (isBotRoom) {
+    throw new Error('Phòng đấu luyện với Bot không sử dụng tiền cược.');
+  }
+
   // Update room stake
   await db
     .update(rooms)
@@ -320,6 +328,14 @@ export async function acceptStake(params: { roomId: string; userId: string }) {
     where: eq(rooms.id, params.roomId),
   });
   if (!room) throw new Error('Không tìm thấy phòng.');
+
+  const seats = await db.query.roomSeats.findMany({
+    where: eq(roomSeats.roomId, room.id),
+  });
+  const isBotRoom = seats.filter((s) => !s.isBot).length <= 1 && seats.some((s) => s.isBot);
+  if (isBotRoom) {
+    return;
+  }
 
   // Check balance >= 5x stake
   const wallet = await db.query.wallets.findFirst({
@@ -944,7 +960,7 @@ export async function getClientRoomState(roomId: string, currentUserId: string):
 
           let displayName = s.botName || `Bot ${i + 1}`;
           let avatarUrl = null;
-          let balance = isBotRoom ? 5000000 : 1000000;
+          let balance = 0;
 
           if (!s.isBot && s.userId && !isBotRoom) {
             const p = await db.query.profiles.findFirst({
@@ -1005,7 +1021,7 @@ export async function getClientRoomState(roomId: string, currentUserId: string):
 
         let displayName = s.botName || `Bot ${i + 1}`;
         let avatarUrl = null;
-        let balance = isBotRoom ? 5000000 : 1000000;
+        let balance = 0;
 
         if (!s.isBot && s.userId && !isBotRoom) {
           const p = await db.query.profiles.findFirst({
@@ -1053,7 +1069,7 @@ export async function getClientRoomState(roomId: string, currentUserId: string):
       code: room.code,
       name: room.name,
       hostUserId: room.hostUserId,
-      stake: room.stake,
+      stake: isBotRoom ? 0 : room.stake,
       status: room.status as any,
       visibility: room.visibility as any,
       currentRoundId: room.currentRoundId,

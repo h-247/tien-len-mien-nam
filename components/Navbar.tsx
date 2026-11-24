@@ -183,7 +183,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           )}
 
-          {user?.status === 'approved' && onPlayWithBots && (
+          {user?.status === 'approved' && user?.role === 'admin' && onPlayWithBots && (
             <button
               onClick={onPlayWithBots}
               className="hidden sm:flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white hover:bg-purple-500 transition-colors shadow-sm"
@@ -285,10 +285,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Mobile Dropdown Navigation */}
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-[#383838] bg-[#262626] px-4 py-3 space-y-2">
-          {user?.status === 'approved' && onPlayWithBots && (
+          {user?.status === 'approved' && user?.role === 'admin' && onPlayWithBots && (
             <button
-              onClick={onPlayWithBots}
-              className="hidden sm:flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-xs sm:text-sm font-semibold text-white hover:bg-purple-500 transition-colors shadow-sm"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onPlayWithBots();
+              }}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-purple-600 px-3 py-2 text-sm font-semibold text-white hover:bg-purple-500 mb-2 transition-colors"
             >
               <Bot className="w-4 h-4" />
               <span>Chơi với Bot</span>

@@ -111,13 +111,12 @@ export default function Home() {
 
   const handleStartPlayWithBots = async (params: {
     botCount: number;
-    stake: number;
     difficulty: 'easy' | 'medium' | 'hard' | 'mixed';
   }) => {
     const res = await fetch('/api/rooms/quick-bot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
+      body: JSON.stringify({ ...params, stake: 0 }),
     });
     const data = (await res.json()) as any;
     if (!res.ok) {
@@ -194,7 +193,7 @@ export default function Home() {
         }}
         onRefresh={fetchUser}
         onCreateRoomClick={() => setCreateDialogOpen(true)}
-        onPlayWithBots={handlePlayWithBots}
+        onPlayWithBots={user.role === 'admin' ? handlePlayWithBots : undefined}
         onAddAccountClick={() => setAddAccountModalOpen(true)}
       />
 
@@ -212,6 +211,7 @@ export default function Home() {
               state={roomState}
               onAction={handleRoomAction}
               onLeaveRoom={handleLeaveRoom}
+              isAdmin={user.role === 'admin'}
             />
           )
         ) : (
@@ -221,7 +221,8 @@ export default function Home() {
               <LobbyView
                 onJoinRoom={handleJoinRoom}
                 onCreateRoomClick={() => setCreateDialogOpen(true)}
-                onPlayWithBotsClick={() => setPlayWithBotsOpen(true)}
+                onPlayWithBotsClick={user.role === 'admin' ? () => setPlayWithBotsOpen(true) : undefined}
+                isAdmin={user.role === 'admin'}
               />
             )}
 
@@ -250,11 +251,13 @@ export default function Home() {
         onSuccess={() => fetchUser()}
       />
 
-      <PlayWithBotsModal
-        isOpen={playWithBotsOpen}
-        onClose={() => setPlayWithBotsOpen(false)}
-        onPlay={handleStartPlayWithBots}
-      />
+      {user.role === 'admin' && (
+        <PlayWithBotsModal
+          isOpen={playWithBotsOpen}
+          onClose={() => setPlayWithBotsOpen(false)}
+          onPlay={handleStartPlayWithBots}
+        />
+      )}
     </div>
   );
 }

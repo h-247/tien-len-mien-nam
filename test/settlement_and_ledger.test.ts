@@ -211,4 +211,39 @@ describe('Settlement & Ledger Financial Correctness', () => {
     const netSum = result.players.reduce((sum, p) => sum + p.netChange, 0);
     expect(netSum).toBe(0);
   });
+
+  it('calculates zero money settlement for bot games with stake 0', () => {
+    const stake = 0;
+    const seats: SeatRoundData[] = [
+      {
+        seatIndex: 0,
+        userId: 'admin_user',
+        displayName: 'Admin User',
+        isBot: false,
+        currentBalance: 0,
+        finishedPosition: 1,
+        remainingCards: [],
+        chopBonusAmount: 0,
+        chopPenaltyAmount: 0,
+      },
+      {
+        seatIndex: 1,
+        userId: null,
+        displayName: 'Bot 1',
+        isBot: true,
+        currentBalance: 0,
+        finishedPosition: 2,
+        remainingCards: [getCard('15_hearts')],
+        chopBonusAmount: 0,
+        chopPenaltyAmount: 0,
+      },
+    ];
+
+    const result = calculateSettlement(stake, seats);
+    for (const p of result.players) {
+      expect(p.netChange).toBe(0);
+      expect(p.basePayout).toBe(0);
+      expect(p.thoiPenalties).toBe(0);
+    }
+  });
 });

@@ -377,9 +377,15 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
         <div className="flex items-center gap-2">
           <span className="font-bold text-white truncate">{room.name}</span>
           <span className="text-neutral-400 font-mono">#{room.code}</span>
-          <span className="text-amber-400 font-bold hidden sm:inline">
-            Cược: {room.stake.toLocaleString('vi-VN')} ₫ {room.isSimulated ? '(Mô phỏng)' : ''}
-          </span>
+          {room.isSimulated ? (
+            <span className="text-purple-400 font-bold hidden sm:inline">
+              Đấu luyện cùng Bot (Không cược)
+            </span>
+          ) : (
+            <span className="text-amber-400 font-bold hidden sm:inline">
+              Cược: {room.stake.toLocaleString('vi-VN')} ₫
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -595,12 +601,13 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
             <h2 className="text-xl sm:text-2xl font-extrabold text-white mb-1">
               {round.instantWinType ? 'TỚI TRẮNG!' : 'Kết thúc ván đấu!'}
             </h2>
-            <p className="text-xs text-neutral-400 mb-1">
-              Mức cược: {round.stake.toLocaleString('vi-VN')} ₫ {room.isSimulated ? '(Mô phỏng)' : ''}
-            </p>
-            {room.isSimulated && (
-              <p className="text-[11px] text-purple-300 font-medium mb-3">
-                🤖 Ván đấu luyện cùng Bot: Tiền cược là mô phỏng (không ảnh hưởng tới ví thật).
+            {room.isSimulated ? (
+              <p className="text-xs text-purple-300 font-medium mb-3">
+                🤖 Ván đấu luyện cùng Bot (Không tính tiền)
+              </p>
+            ) : (
+              <p className="text-xs text-neutral-400 mb-3">
+                Mức cược: {round.stake.toLocaleString('vi-VN')} ₫
               </p>
             )}
 
@@ -612,7 +619,9 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                     <th className="py-2 px-3">Hạng</th>
                     <th className="py-2 px-3">Người chơi</th>
                     <th className="py-2 px-3 text-right">Bài còn lại</th>
-                    <th className="py-2 px-3 text-right">Số dư {room.isSimulated ? '(Ảo)' : ''}</th>
+                    {!room.isSimulated && (
+                      <th className="py-2 px-3 text-right">Số dư</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-800">
@@ -637,9 +646,11 @@ export const GameTableView: React.FC<GameTableViewProps> = ({
                         <td className="py-2.5 px-3 text-right text-neutral-400">
                           {seat?.cardCount === 0 ? 'Hết bài' : `${seat?.cardCount} lá`}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-400">
-                          {(seat?.balance || 0).toLocaleString('vi-VN')} ₫
-                        </td>
+                        {!room.isSimulated && (
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-400">
+                            {(seat?.balance || 0).toLocaleString('vi-VN')} ₫
+                          </td>
+                        )}
                       </tr>
                     );
                   })}

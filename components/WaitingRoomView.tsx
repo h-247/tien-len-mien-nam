@@ -21,6 +21,7 @@ interface WaitingRoomViewProps {
   state: ClientRoomState;
   onAction: (actionData: any) => Promise<void>;
   onLeaveRoom: () => void;
+  isAdmin?: boolean;
 }
 
 const STAKE_PRESETS = [10000, 20000, 50000, 100000, 200000];
@@ -29,6 +30,7 @@ export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
   state,
   onAction,
   onLeaveRoom,
+  isAdmin,
 }) => {
   const { room, seats, mySeatIndex } = state;
   const isHost = mySeatIndex !== null && seats[mySeatIndex]?.isHost;
@@ -47,7 +49,7 @@ export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
   const allHumansAccepted = seats.every(
     (s) => s === null || s.isBot || s.stakeAccepted
   );
-  const canStartMatch = isHost && hasEnoughPlayers && allHumansAccepted;
+  const canStartMatch = isHost && hasEnoughPlayers && (isSimulated || allHumansAccepted);
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(room.code);
@@ -153,7 +155,7 @@ export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
           <p className="text-xs text-neutral-400 mt-1">
             {isSimulated ? (
               <span className="text-purple-300 font-medium">
-                🤖 Phòng đấu tập với Bot — Tiền cược là MÔ PHỎNG (không ảnh hưởng tới ví thật).
+                🤖 Phòng đấu luyện cùng Bot — Không cược tiền (thuần rèn luyện kỹ năng).
               </span>
             ) : (
               'Đủ 4 người chơi và thống nhất mức cược để chủ phòng bắt đầu ván đấu.'
@@ -195,78 +197,99 @@ export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
         </div>
       )}
 
-      {/* Stake Agreement Banner */}
-      <div className="bg-[#262626] border border-[#383838] p-4 sm:p-5 rounded-2xl shadow-md">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-neutral-400 uppercase tracking-wider">
-              <Coins className="w-4 h-4 text-amber-400" />
-              <span>Thỏa thuận mức cược phòng</span>
+      {/* Stake Agreement Banner / Bot Practice Banner */}
+      {isSimulated ? (
+        <div className="bg-[#262626] border border-purple-800/40 p-4 sm:p-5 rounded-2xl shadow-md flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-950/60 border border-purple-700/50 flex items-center justify-center text-purple-300">
+              <Bot className="w-5 h-5" />
             </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-amber-400 mt-1">
-              {room.stake.toLocaleString('vi-VN')} ₫
-            </div>
-            <p className="text-[11px] text-neutral-400 mt-0.5">
-              Yêu cầu số dư tối thiểu để vào cược: {(room.stake * 5).toLocaleString('vi-VN')} ₫ (5x mức cược)
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {isHost && (
-              <button
-                onClick={() => setEditingStake(!editingStake)}
-                className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-white border border-[#383838]"
-              >
-                {editingStake ? 'Đóng chỉnh cược' : 'Đổi mức cược'}
-              </button>
-            )}
-
-            {!isHost && mySeat && !mySeat.stakeAccepted && (
-              <button
-                onClick={handleAcceptStake}
-                disabled={loading}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-sm shadow-md transition-all"
-              >
-                <Check className="w-4 h-4" />
-                <span>Đồng ý mức cược {room.stake.toLocaleString('vi-VN')} ₫</span>
-              </button>
-            )}
-
-            {!isHost && mySeat && mySeat.stakeAccepted && (
-              <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-950/40 border border-emerald-800 text-xs font-bold text-emerald-400">
-                <ShieldCheck className="w-4 h-4" />
-                <span>Đã chấp nhận mức cược</span>
+            <div>
+              <div className="flex items-center gap-2 text-xs font-semibold text-purple-400 uppercase tracking-wider">
+                <span>Chế độ luyện tập cùng Bot</span>
               </div>
-            )}
+              <div className="text-sm sm:text-base font-bold text-white mt-0.5">
+                Không cược tiền • Thuần rèn luyện kỹ năng
+              </div>
+              <p className="text-[11px] text-neutral-400 mt-0.5">
+                Ván đấu hoàn toàn không tính tiền và không ảnh hưởng đến số dư ví hay Bảng xếp hạng.
+              </p>
+            </div>
           </div>
         </div>
+      ) : (
+        <div className="bg-[#262626] border border-[#383838] p-4 sm:p-5 rounded-2xl shadow-md">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-semibold text-neutral-400 uppercase tracking-wider">
+                <Coins className="w-4 h-4 text-amber-400" />
+                <span>Thỏa thuận mức cược phòng</span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-extrabold text-amber-400 mt-1">
+                {room.stake.toLocaleString('vi-VN')} ₫
+              </div>
+              <p className="text-[11px] text-neutral-400 mt-0.5">
+                Yêu cầu số dư tối thiểu để vào cược: {(room.stake * 5).toLocaleString('vi-VN')} ₫ (5x mức cược)
+              </p>
+            </div>
 
-        {/* Stake Adjustment Panel for Host */}
-        {isHost && editingStake && (
-          <div className="mt-4 pt-4 border-t border-[#383838] space-y-3">
-            <span className="text-xs text-neutral-300 font-medium block">
-              Chọn mức cược mới (Người chơi khác sẽ cần chấp nhận lại):
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {STAKE_PRESETS.map((amt) => (
+            <div className="flex flex-wrap items-center gap-2">
+              {isHost && (
                 <button
-                  key={amt}
-                  type="button"
-                  onClick={() => handleUpdateStake(amt)}
-                  disabled={loading}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-                    room.stake === amt
-                      ? 'bg-amber-400 text-black border-amber-400'
-                      : 'bg-[#1A1A1A] text-neutral-300 border-[#383838] hover:border-white'
-                  }`}
+                  onClick={() => setEditingStake(!editingStake)}
+                  className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-xs font-semibold text-white border border-[#383838]"
                 >
-                  {amt.toLocaleString('vi-VN')} ₫
+                  {editingStake ? 'Đóng chỉnh cược' : 'Đổi mức cược'}
                 </button>
-              ))}
+              )}
+
+              {!isHost && mySeat && !mySeat.stakeAccepted && (
+                <button
+                  onClick={handleAcceptStake}
+                  disabled={loading}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-sm shadow-md transition-all"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Đồng ý mức cược {room.stake.toLocaleString('vi-VN')} ₫</span>
+                </button>
+              )}
+
+              {!isHost && mySeat && mySeat.stakeAccepted && (
+                <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-950/40 border border-emerald-800 text-xs font-bold text-emerald-400">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Đã chấp nhận mức cược</span>
+                </div>
+              )}
             </div>
           </div>
-        )}
-      </div>
+
+          {/* Stake Adjustment Panel for Host */}
+          {isHost && editingStake && (
+            <div className="mt-4 pt-4 border-t border-[#383838] space-y-3">
+              <span className="text-xs text-neutral-300 font-medium block">
+                Chọn mức cược mới (Người chơi khác sẽ cần chấp nhận lại):
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {STAKE_PRESETS.map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => handleUpdateStake(amt)}
+                    disabled={loading}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                      room.stake === amt
+                        ? 'bg-amber-400 text-black border-amber-400'
+                        : 'bg-[#1A1A1A] text-neutral-300 border-[#383838] hover:border-white'
+                    }`}
+                  >
+                    {amt.toLocaleString('vi-VN')} ₫
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 4 Seats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -288,7 +311,7 @@ export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
                   Ghế #{seatIndex + 1} còn trống
                 </span>
 
-                {isHost && (
+                {isHost && isAdmin && (
                   <div className="flex flex-wrap justify-center gap-1.5">
                     <button
                       onClick={() => handleAddBot(seatIndex, 'easy')}
@@ -355,6 +378,8 @@ export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
                           <span className="capitalize text-purple-400">
                             Bot ({seat.botDifficulty === 'easy' ? 'Dễ' : seat.botDifficulty === 'medium' ? 'Vừa' : 'Khó'})
                           </span>
+                        ) : isSimulated ? (
+                          <span className="text-neutral-400">Đấu tập</span>
                         ) : (
                           `Số dư: ${seat.balance.toLocaleString('vi-VN')} ₫`
                         )}
@@ -382,8 +407,13 @@ export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
 
               {/* Status footer for this seat */}
               <div className="pt-3 border-t border-[#383838] flex items-center justify-between text-xs">
-                <span className="text-neutral-400">Trạng thái cược:</span>
-                {seat.stakeAccepted ? (
+                <span className="text-neutral-400">{isSimulated ? 'Trạng thái:' : 'Trạng thái cược:'}</span>
+                {isSimulated ? (
+                  <span className="flex items-center gap-1 text-emerald-400 font-bold">
+                    <Check className="w-3.5 h-3.5" />
+                    Sẵn sàng
+                  </span>
+                ) : seat.stakeAccepted ? (
                   <span className="flex items-center gap-1 text-emerald-400 font-bold">
                     <Check className="w-3.5 h-3.5" />
                     Đã đồng ý
@@ -405,7 +435,7 @@ export const WaitingRoomView: React.FC<WaitingRoomViewProps> = ({
               ⚠️ Cần ít nhất 2 người chơi (hoặc thêm Bot) để bắt đầu ván.
             </p>
           )}
-          {hasEnoughPlayers && !allHumansAccepted && (
+          {hasEnoughPlayers && !isSimulated && !allHumansAccepted && (
             <p className="text-amber-400 font-medium">
               ⚠️ Đang chờ tất cả người chơi thực đồng ý với mức cược {room.stake.toLocaleString('vi-VN')} ₫.
             </p>

@@ -8,7 +8,6 @@ interface PlayWithBotsModalProps {
   onClose: () => void;
   onPlay: (params: {
     botCount: number;
-    stake: number;
     difficulty: 'easy' | 'medium' | 'hard' | 'mixed';
   }) => Promise<void>;
 }
@@ -19,7 +18,6 @@ export const PlayWithBotsModal: React.FC<PlayWithBotsModalProps> = ({
   onPlay,
 }) => {
   const [botCount, setBotCount] = useState<number>(3);
-  const [stake, setStake] = useState<number>(10000);
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard' | 'mixed'>('mixed');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +29,7 @@ export const PlayWithBotsModal: React.FC<PlayWithBotsModalProps> = ({
     try {
       setLoading(true);
       setError(null);
-      await onPlay({ botCount, stake, difficulty });
+      await onPlay({ botCount, difficulty });
       onClose();
     } catch (err: any) {
       setError(err.message || 'Không thể tạo phòng đấu với Bot.');
@@ -39,8 +37,6 @@ export const PlayWithBotsModal: React.FC<PlayWithBotsModalProps> = ({
       setLoading(false);
     }
   };
-
-  const stakeOptions = [5000, 10000, 20000, 50000, 100000];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
@@ -59,15 +55,15 @@ export const PlayWithBotsModal: React.FC<PlayWithBotsModalProps> = ({
           </div>
           <div>
             <h2 className="text-lg font-bold">Chơi với Bot AI</h2>
-            <p className="text-xs text-neutral-400">Tùy chọn số lượng Bot và mức cược mô phỏng</p>
+            <p className="text-xs text-neutral-400">Tùy chọn số lượng Bot và mức độ thử thách</p>
           </div>
         </div>
 
-        {/* Simulated money notice */}
+        {/* Training mode notice */}
         <div className="mt-3 mb-4 p-3 rounded-xl bg-purple-950/30 border border-purple-800/40 text-xs text-purple-200 flex items-start gap-2">
           <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
           <span>
-            <b>Tiền mô phỏng:</b> Tiền cược và thắng thua khi chơi với Bot hoàn toàn là mô phỏng, không ảnh hưởng đến số dư ví thật và không tính vào Bảng xếp hạng.
+            <b>Chế độ luyện tập:</b> Không cược tiền, chơi thuần giải trí và rèn luyện kỹ năng với các cấp độ AI.
           </span>
         </div>
 
@@ -101,29 +97,6 @@ export const PlayWithBotsModal: React.FC<PlayWithBotsModalProps> = ({
                 >
                   <div className="font-bold text-sm">{opt.label}</div>
                   <div className="text-[10px] text-neutral-300/80">{opt.sub}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Simulated stake selection */}
-          <div>
-            <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
-              Mức cược mô phỏng:
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {stakeOptions.map((stk) => (
-                <button
-                  type="button"
-                  key={stk}
-                  onClick={() => setStake(stk)}
-                  className={`py-1.5 px-2 rounded-lg border text-xs font-bold transition-all ${
-                    stake === stk
-                      ? 'bg-amber-400 text-black border-amber-300 shadow-sm'
-                      : 'bg-neutral-800 border-[#383838] text-neutral-300 hover:border-neutral-500'
-                  }`}
-                >
-                  {stk.toLocaleString('vi-VN')} ₫
                 </button>
               ))}
             </div>

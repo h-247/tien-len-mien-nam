@@ -152,7 +152,7 @@ export function calculateSettlement(
       totalThoiPenaltiesCollected += thoiPenaltyAmount;
     }
 
-    const basePayout = Math.round(baseMult * stake);
+    const basePayout = Math.round(baseMult * stake) || 0;
 
     players.push({
       seatIndex: seat.seatIndex,
@@ -188,9 +188,9 @@ export function calculateSettlement(
   // Step 2: Compute net change for each player
   for (const p of players) {
     if (p.seatIndex === winnerSeatIndex) {
-      p.netChange = p.basePayout + totalThoiPenaltiesCollected + p.chopBonuses - p.chopPenalties;
+      p.netChange = (p.basePayout + totalThoiPenaltiesCollected + p.chopBonuses - p.chopPenalties) || 0;
     } else {
-      p.netChange = p.basePayout - p.thoiPenalties + p.chopBonuses - p.chopPenalties;
+      p.netChange = (p.basePayout - p.thoiPenalties + p.chopBonuses - p.chopPenalties) || 0;
     }
   }
 
@@ -201,24 +201,25 @@ export function calculateSettlement(
     if (p.netChange < 0 && p.balanceBefore + p.netChange < 0) {
       const maxLoss = -p.balanceBefore;
       excessDeficit += -p.netChange - maxLoss;
-      p.netChange = maxLoss;
+      p.netChange = maxLoss || 0;
     }
   }
 
   // If any player hit 0 balance limit, deduct excess from winner to preserve exact zero-sum
   if (excessDeficit > 0) {
-    winner.netChange -= excessDeficit;
+    winner.netChange = (winner.netChange - excessDeficit) || 0;
   }
 
   // Verify zero-sum check
   const totalNet = players.reduce((sum, p) => sum + p.netChange, 0);
   if (totalNet !== 0) {
     // Correct 1-dong rounding jitter if any
-    winner.netChange -= totalNet;
+    winner.netChange = (winner.netChange - totalNet) || 0;
   }
 
   // Compute final balanceAfter
   for (const p of players) {
+    p.netChange = p.netChange || 0;
     p.balanceAfter = p.balanceBefore + p.netChange;
   }
 

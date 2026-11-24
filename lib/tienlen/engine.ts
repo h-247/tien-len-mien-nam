@@ -88,7 +88,11 @@ export function initializeRound(
   }
 
   const roundLogs: string[] = [];
-  roundLogs.push(`Bắt đầu ván #${roundNumber}. Mức cược: ${stake.toLocaleString('vi-VN')} ₫.`);
+  roundLogs.push(
+    stake > 0
+      ? `Bắt đầu ván #${roundNumber}. Mức cược: ${stake.toLocaleString('vi-VN')} ₫.`
+      : `Bắt đầu ván #${roundNumber} (Đấu luyện cùng Bot).`
+  );
 
   if (instantWinType && instantWinSeat !== null) {
     const winnerSeatInfo = seats.find((st) => st.seatIndex === instantWinSeat)!;

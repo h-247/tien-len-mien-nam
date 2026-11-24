@@ -88,6 +88,12 @@ export async function POST(
         break;
 
       case 'configureBot':
+        if (user.role !== 'admin') {
+          return NextResponse.json(
+            { error: 'Chức năng chơi với Bot chỉ dành cho Quản trị viên.' },
+            { status: 403 }
+          );
+        }
         await configureBotSeat({
           roomId,
           hostUserId: user.id,

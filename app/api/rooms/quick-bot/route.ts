@@ -4,7 +4,7 @@ import { createQuickBotRoom } from '@/lib/server/game-service';
 import { z } from 'zod';
 
 const quickBotSchema = z.object({
-  stake: z.number().int().min(1000).max(10000000).optional(),
+  stake: z.number().int().min(0).max(10000000).optional(),
   difficulty: z.enum(['easy', 'medium', 'hard', 'mixed']).optional(),
   botCount: z.number().int().min(1).max(3).optional(),
 });
@@ -12,6 +12,13 @@ const quickBotSchema = z.object({
 export async function POST(req: Request) {
   try {
     const user = await requireApprovedUser();
+    if (user.role !== 'admin') {
+      return NextResponse.json(
+        { error: 'Chức năng chơi với Bot chỉ dành cho Quản trị viên.' },
+        { status: 403 }
+      );
+    }
+
     let body = {};
     try {
       body = await req.json();
@@ -20,13 +27,12 @@ export async function POST(req: Request) {
     }
 
     const parsed = quickBotSchema.safeParse(body);
-    const stake = parsed.success ? parsed.data.stake : 10000;
-    const difficulty = parsed.success ? parsed.data.difficulty : 'mixed';
+    const difficulty = parsed.success && parsed.data.difficulty ? parsed.data.difficulty : 'mixed';
     const botCount = parsed.success && parsed.data.botCount ? parsed.data.botCount : 3;
 
     const result = await createQuickBotRoom({
       hostUserId: user.id,
-      stake,
+      stake: 0,
       difficulty,
       botCount,
     });
